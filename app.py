@@ -540,6 +540,8 @@ footer {visibility: hidden}
 """
 
 with gr.Blocks(theme=theme, css=css) as demo:
+    gr.LoginButton(visible=False)
+    gr.LogoutButton(visible=False)
     gr.HTML("""
     <div class="title-container">
         <h1>💻 Cypher Coder</h1>
