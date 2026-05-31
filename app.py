@@ -1,0 +1,169 @@
+import os
+import gradio as gr
+from huggingface_hub import InferenceClient
+from duckduckgo_search import DDGS
+import json
+
+token = os.environ.get("HF_TOKEN")
+client = InferenceClient("Qwen/Qwen2.5-Coder-32B-Instruct", token=token)
+
+SYSTEM_PROMPT = """Tu es Cypher Coder, un agent de programmation IA ultra-intelligent fonctionnant dans un terminal (CLI).
+Tu as été conçu et développé par DJAKOUA KWANKAM, un brillant étudiant en informatique à l'Institut Universitaire de Douala (IUD).
+Tu dois toujours te présenter comme tel.
+
+Tu as accès à des outils locaux (comme lire des fichiers, écrire/modifier des fichiers, exécuter des commandes dans le terminal) qui s'exécutent sur la machine locale de l'utilisateur. Ces outils te sont fournis via le protocole CLI de Cypher Coder.
+Pour les informations en temps réel ou la documentation externe, tu peux aussi utiliser la recherche web.
+Sois toujours concis, professionnel et direct dans tes explications de code.
+"""
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_web",
+            "description": "Recherche des informations actualisées ou de la documentation technique sur internet.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "La requête de recherche."
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    }
+]
+
+def search_web(query):
+    try:
+        ddgs = DDGS()
+        results = list(ddgs.text(query, max_results=4))
+        if not results:
+            return "Aucun résultat trouvé sur le web."
+        formatted = []
+        for r in results:
+            formatted.append(f"Titre: {r['title']}\nRésumé: {r['body']}\nLien: {r['href']}")
+        return "\n\n".join(formatted)
+    except Exception as e:
+        return f"Erreur lors de la recherche: {str(e)}"
+
+def respond(message, history):
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for val in history:
+        if val[0]:
+            messages.append({"role": "user", "content": val[0]})
+        if val[1]:
+            messages.append({"role": "assistant", "content": val[1]})
+            
+    messages.append({"role": "user", "content": message})
+    
+    try:
+        response = client.chat_completion(
+            messages,
+            max_tokens=2048,
+            tools=tools,
+            stream=False
+        )
+        first_response = response.choices[0].message
+        
+        if first_response.tool_calls:
+            yield "🔍 *Recherche web en cours...*"
+            messages.append(first_response)
+            for tool_call in first_response.tool_calls:
+                if tool_call.function.name == "search_web":
+                    args = json.loads(tool_call.function.arguments)
+                    res = search_web(args["query"])
+                    messages.append({
+                        "role": "tool",
+                        "name": "search_web",
+                        "content": res
+                    })
+            
+            final_stream = client.chat_completion(
+                messages,
+                max_tokens=2048,
+                stream=True
+            )
+            response_text = ""
+            for chunk in final_stream:
+                token = chunk.choices[0].delta.content
+                if token:
+                    response_text += token
+                    yield response_text
+        else:
+            if first_response.content:
+                yield first_response.content
+    except Exception as e:
+        yield f"Erreur lors de la génération: {str(e)}"
+
+# Interface Web Gradio avec documentation et présentation esthétique
+theme = gr.themes.Soft(
+    primary_hue="indigo",
+    secondary_hue="cyan",
+    neutral_hue="slate"
+)
+
+css = """
+footer {visibility: hidden}
+.title-container { text-align: center; margin-bottom: 20px; }
+.pixel-art { font-family: monospace; font-size: 8px; line-height: 8px; text-align: center; color: #4F46E5; }
+"""
+
+with gr.Blocks(theme=theme, css=css) as demo:
+    gr.HTML("""
+    <div class="title-container">
+        <h1>💻 Cypher Coder</h1>
+        <p style='font-size: 1.2em; color: #6366F1;'>L'Agent de Programmation CLI Autonome</p>
+        <p>Créé par <b>DJAKOUA KWANKAM</b> - Étudiant à l'Institut Universitaire de Douala (IUD)</p>
+    </div>
+    """)
+    
+    with gr.Tab("💬 Tester en Ligne"):
+        gr.ChatInterface(
+            respond,
+            examples=[
+                "Qui es-tu ?",
+                "Écris-moi une fonction JavaScript pour trier un tableau.",
+                "Quels outils CLI as-tu ?"
+            ]
+        )
+        
+    with gr.Tab("📖 Documentation CLI"):
+        gr.Markdown("""
+        # ⚙️ Cypher Coder CLI
+        
+        **Cypher Coder** est un agent conversationnel en ligne de commande (CLI) similaire à *Claude Code* ou *Gemini CLI*. Il est conçu pour s'exécuter directement dans votre terminal local et interagir avec votre système de fichiers de manière sécurisée.
+
+        ---
+
+        ## 🚀 Installation & Utilisation
+        
+        Pour exécuter Cypher Coder localement :
+        ```bash
+        # Naviguer dans le dossier du projet
+        cd Documents/cypher-coder
+        
+        # Lancer l'agent CLI
+        cypher
+        ```
+
+        ## 🛠️ Commandes Disponibles dans le CLI
+        
+        - `/help`   - Affiche l'aide
+        - `/clear`  - Efface l'écran et réinitialise l'historique
+        - `/exit`   - Ferme proprement l'application
+        - `/settings` - Configure le jeton Hugging Face ou d'autres paramètres
+
+        ## 🔌 Outils du Système (Capabilities)
+        
+        Lorsqu'il s'exécute localement via le terminal, **Cypher Coder** peut utiliser des outils pour vous aider :
+        - 📁 **Lecture de fichiers** : Lire du code ou du texte sur votre machine.
+        - 📝 **Écriture & Modification de fichiers** : Créer ou éditer des fichiers sources.
+        - 🖥️ **Exécution de commandes** : Lancer des tests, installer des paquets, compiler, etc. (avec votre consentement explicite).
+        - 🌐 **Recherche Web** : Rechercher sur internet en temps réel pour obtenir la documentation de dernière minute.
+        """)
+
+if __name__ == "__main__":
+    demo.launch()
