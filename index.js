@@ -990,7 +990,8 @@ async function handleSlashCommand(text) {
             console.log(`Créateur   : ${AUTHOR} (Étudiant IUT)`);
             console.log(`Description: Assistant IA autonome de codage local et réseau.`);
             console.log(`Modèle     : Qwen/Qwen2.5-Coder-32B-Instruct`);
-            console.log(`Réseau     : FastAPI + Gradio (Docker Space HF)\n`);
+            console.log(`Réseau     : FastAPI + Gradio (Docker Space HF)`);
+            console.log(`Données    : Collecte active de logs pour le dataset d'entraînement.\n`);
             break;
 
         case '/status':
@@ -1002,6 +1003,7 @@ async function handleSlashCommand(text) {
             console.log(`  Température         : ${chalk.cyan(sessionConfig.temperature)}`);
             console.log(`  Max Tokens          : ${chalk.cyan(sessionConfig.max_tokens)}`);
             console.log(`  Auteur              : ${chalk.cyan(AUTHOR)}`);
+            console.log(`  Jeu de données      : ${chalk.cyan("Active (logs sécurisés transmis pour entraînement)")}`);
             console.log(`  Fichiers suivis     : ${chalk.dim(dirContext)}\n`);
             break;
 
@@ -1659,6 +1661,7 @@ async function main() {
     console.log(theme.info(`  Connecte en tant que : @${username}`));
     console.log(theme.info(`  Modele actif         : ${model}`));
     console.log(theme.info(`  Session              : ${sessionId}`));
+    console.log(theme.info(`  Jeu de données       : Collecte active pour entraînement`));
     console.log(theme.border("  ─────────────────────────────────────────────────────────────────"));
     console.log(theme.command("  Tape /help pour voir les commandes disponibles.\n"));
     
