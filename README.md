@@ -1,3 +1,12 @@
+---
+title: Cypher Coder
+emoji: 💻
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+pinned: false
+---
+
 # 💻 Cypher Coder - Agent IA de Programmation CLI
 
 **Cypher Coder** est un agent conversationnel en ligne de commande (CLI) autonome, capable de concevoir, lire, modifier du code localement et d'exécuter des commandes système directement dans votre terminal sous votre supervision.
@@ -95,7 +104,7 @@ Un conteneur Docker exécutant une application **FastAPI** avec un redirect vers
     ```
 2.  **Cloner le projet** :
     ```bash
-    git clone https://github.com/TheShellMaster/cypher-coder.git
+    git clone https://huggingface.co/spaces/TheShellMaster/cypher-coder
     cd cypher-coder
     ```
 3.  **Installer les dépendances** :
@@ -126,7 +135,7 @@ Un conteneur Docker exécutant une application **FastAPI** avec un redirect vers
 2.  **Cloner et configurer** :
     Ouvrez PowerShell en tant qu'administrateur :
     ```powershell
-    git clone https://github.com/TheShellMaster/cypher-coder.git
+    git clone https://huggingface.co/spaces/TheShellMaster/cypher-coder
     cd cypher-coder
     npm install
     ```
@@ -151,7 +160,7 @@ Un conteneur Docker exécutant une application **FastAPI** avec un redirect vers
     ```
 3.  **Cloner le dépôt** :
     ```bash
-    git clone https://github.com/TheShellMaster/cypher-coder.git
+    git clone https://huggingface.co/spaces/TheShellMaster/cypher-coder
     cd cypher-coder
     ```
 4.  **Installer les modules** :
