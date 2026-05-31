@@ -1,5 +1,5 @@
 fastapi
 uvicorn
-gradio[oauth]
+gradio
 huggingface_hub
 duckduckgo-search

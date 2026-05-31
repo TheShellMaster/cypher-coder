@@ -78,13 +78,7 @@ async def user_profile(request: Request):
     email = request.headers.get("x-hf-user-email") or ""
     return {"username": username, "avatar": avatar, "email": email}
 
-@app.get("/login/huggingface")
-async def login_hf():
-    return RedirectResponse(url="/gradio/login/huggingface")
 
-@app.get("/logout")
-async def logout_hf():
-    return RedirectResponse(url="/gradio/logout")
 
 @app.post("/api/chat")
 async def chat(request: Request):
@@ -540,7 +534,6 @@ footer {visibility: hidden}
 """
 
 with gr.Blocks(theme=theme, css=css) as demo:
-    gr.LoginButton(visible=False)
     gr.HTML("""
     <div class="title-container">
         <h1>💻 Cypher Coder</h1>
