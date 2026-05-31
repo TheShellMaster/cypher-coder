@@ -1,7 +1,7 @@
 import os
 import gradio as gr
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
 from huggingface_hub import InferenceClient, HfApi, create_repo
 from duckduckgo_search import DDGS
 import json
@@ -63,8 +63,28 @@ def save_log(username: str, message: str, response: str):
         print(f"Erreur d'enregistrement du log de discussion: {e}")
 
 @app.get("/")
-async def root():
-    return RedirectResponse(url="/gradio")
+async def root(request: Request):
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content, status_code=200)
+    except Exception as e:
+        return HTMLResponse(content=f"Error loading interface: {str(e)}", status_code=500)
+
+@app.get("/api/user-profile")
+async def user_profile(request: Request):
+    username = request.headers.get("x-hf-user-name") or "invité"
+    avatar = request.headers.get("x-hf-user-avatar") or ""
+    email = request.headers.get("x-hf-user-email") or ""
+    return {"username": username, "avatar": avatar, "email": email}
+
+@app.get("/login/huggingface")
+async def login_hf():
+    return RedirectResponse(url="/gradio/login/huggingface")
+
+@app.get("/logout")
+async def logout_hf():
+    return RedirectResponse(url="/gradio/logout")
 
 @app.post("/api/chat")
 async def chat(request: Request):
