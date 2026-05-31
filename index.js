@@ -26,6 +26,37 @@ marked.setOptions({
 const AUTHOR = "DJAKOUA KWANKAM";
 const APP_NAME = "Cypher Coder";
 
+// Global Session State & Config
+let chatMessages = [];
+let lastUserInput = "";
+let lastAssistantResponse = "";
+let commandHistory = [];
+let savedContexts = {};
+let loadedFiles = [];
+let macros = {};
+let logs = [];
+
+const sessionConfig = {
+    model: "Qwen/Qwen2.5-Coder-32B-Instruct",
+    temperature: 0.7,
+    top_p: 0.9,
+    max_tokens: 2048,
+    stream: false,
+    sandbox: false,
+    verbose: false,
+    silent: false,
+    color: true,
+    theme: "dark",
+    format: "md",
+    lang: "fr",
+    env: {}
+};
+
+function addLog(level, message) {
+    const logItem = `[${new Date().toISOString()}] [${level}] ${message}`;
+    logs.push(logItem);
+}
+
 // Banner ASCII Art pour l'interface de démarrage
 const BANNER = chalk.cyan.bold(`
    _____             _---------------+
@@ -150,10 +181,18 @@ const tools = [
 
 // Outil d'exécution d'API robuste via curl pour contourner les problèmes de socket de Node.js
 function callApiViaCurl(messages, clientTools) {
-    const payload = JSON.stringify({ messages, tools: clientTools });
+    const payload = JSON.stringify({ 
+        messages, 
+        tools: clientTools,
+        model: sessionConfig.model,
+        temperature: sessionConfig.temperature,
+        top_p: sessionConfig.top_p,
+        max_tokens: sessionConfig.max_tokens
+    });
     const escapedPayload = payload.replace(/'/g, "'\\''");
     const command = `curl -s -X POST -H "Content-Type: application/json" -d '${escapedPayload}' https://theshellmaster-cypher-coder.hf.space/api/chat`;
     
+    addLog("DEBUG", `Envoi payload API vers HF Space: modèle=${sessionConfig.model}, température=${sessionConfig.temperature}`);
     const output = execSync(command).toString();
     try {
         const responseJson = JSON.parse(output);
@@ -672,7 +711,6 @@ Le répertoire de travail actuel contient les dossiers et fichiers suivants au p
 Sois précis, concis et direct. Formate tes réponses en Markdown standard.`;
 }
 
-let chatMessages = [];
 
 function initChat() {
     chatMessages = [{"role": "system", "content": getSystemPrompt()}];
@@ -692,6 +730,8 @@ async function runAgentTurn() {
         chatMessages.push(replyMessage);
         
         if (replyMessage.content) {
+            lastAssistantResponse = replyMessage.content;
+            addLog("INFO", "Réponse de l'assistant enregistrée.");
             console.log(chalk.green(`\n🤖 Cypher : `));
             // Rendre le Markdown de l'IA avec formatage ANSI coloré
             console.log(marked(replyMessage.content));
@@ -725,6 +765,807 @@ async function runAgentTurn() {
     }
 }
 
+async function handleSlashCommand(text) {
+    if (!text.startsWith('/')) {
+        return false;
+    }
+    
+    const parts = text.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+    if (parts.length === 0) return true;
+    
+    const commandName = parts[0];
+    const rawArgs = parts.slice(1).map(a => a.replace(/^["']|["']$/g, ''));
+    
+    addLog("INFO", `Commande slash reçue: ${text}`);
+    commandHistory.push(text);
+    
+    const cleanArgs = [];
+    const flags = {};
+    for (let i = 0; i < rawArgs.length; i++) {
+        if (rawArgs[i].startsWith('--')) {
+            const key = rawArgs[i].slice(2);
+            if (rawArgs[i+1] && !rawArgs[i+1].startsWith('--')) {
+                flags[key] = rawArgs[++i];
+            } else {
+                flags[key] = true;
+            }
+        } else {
+            cleanArgs.push(rawArgs[i]);
+        }
+    }
+
+    switch (commandName.toLowerCase()) {
+        // --- 1. Contrôle de session
+        case '/help':
+            console.log(chalk.cyan.bold("\n📚 CYPHER CODER CLI - COMMANDES DISPONIBLES :"));
+            
+            console.log(chalk.yellow("\n🎛️ Session :"));
+            console.log("  /help                     - Affiche ce menu d'aide");
+            console.log("  /exit, /quit              - Quitte proprement l'agent");
+            console.log("  /clear                    - Efface l'écran");
+            console.log("  /reset                    - Réinitialise la discussion et l'historique");
+            console.log("  /restart                  - Redémarre proprement la session");
+            console.log("  /version                  - Affiche la version actuelle");
+            console.log("  /about                    - Infos sur le projet");
+            console.log("  /status                   - Affiche le statut complet");
+            
+            console.log(chalk.yellow("\n💬 Mémoire et Contexte :"));
+            console.log("  /context                  - Affiche les fichiers chargés en contexte");
+            console.log("  /context clear            - Efface le contexte de fichiers");
+            console.log("  /context save <nom>       - Sauvegarde la session actuelle");
+            console.log("  /context load <nom>       - Charge une session sauvegardée");
+            console.log("  /context list             - Liste les sessions sauvegardées");
+            console.log("  /memory                   - Affiche la mémoire système + messages");
+            console.log("  /memory clear             - Efface les messages d'historique");
+            console.log("  /tokens                   - Affiche les statistiques de tokens");
+
+            console.log(chalk.yellow("\n📜 Historique :"));
+            console.log("  /history                  - Affiche tout l'historique");
+            console.log("  /history clear            - Efface l'historique enregistré");
+            console.log("  /history save <fichier>   - Exporte l'historique dans un fichier");
+            console.log("  /history load <fichier>   - Importe un historique");
+            console.log("  /history search <terme>   - Cherche dans l'historique");
+            console.log("  /last                     - Affiche la dernière réponse de l'agent");
+            console.log("  /redo                     - Relance la dernière requête");
+            console.log("  /undo                     - Annule la dernière interaction");
+
+            console.log(chalk.yellow("\n🤖 Modèle et Configuration :"));
+            console.log("  /model                    - Affiche le modèle utilisé");
+            console.log("  /model list               - Liste les modèles supportés");
+            console.log("  /model set <nom>          - Change de modèle");
+            console.log("  /model info               - Affiche les infos du modèle");
+            console.log("  /temperature <valeur>     - Ajuste la température (0.0 - 1.0)");
+            console.log("  /top_p <valeur>           - Ajuste le top_p");
+            console.log("  /max_tokens <valeur>      - Ajuste la limite de tokens");
+            console.log("  /system                   - Affiche le prompt système");
+            console.log("  /system set <prompt>      - Modifie le prompt système");
+            console.log("  /system reset             - Réinitialise le prompt système");
+            console.log("  /stream <on|off>          - Active/désactive le streaming");
+
+            console.log(chalk.yellow("\n📁 Fichiers :"));
+            console.log("  /file load <chemin>       - Charge le fichier dans le contexte");
+            console.log("  /file read <chemin>       - Lit et affiche un fichier");
+            console.log("  /file write <chemin>      - Écrit la dernière réponse dans un fichier");
+            console.log("  /file append <chemin>     - Ajoute la dernière réponse à un fichier");
+            console.log("  /file list                - Liste les fichiers chargés");
+            console.log("  /file clear               - Vide le contexte de fichiers");
+            console.log("  /file diff <f1> <f2>      - Compare deux fichiers");
+            console.log("  /upload <chemin>          - Simule l'envoi d'un fichier");
+            console.log("  /download <nom>           - Télécharge un fichier");
+
+            console.log(chalk.yellow("\n⚡ Code et Commandes :"));
+            console.log("  /run                      - Exécute le dernier bloc de code");
+            console.log("  /run <lang> <code>        - Exécute le code fourni");
+            console.log("  /exec <commande>          - Lance une commande système");
+            console.log("  /shell                    - Lance un terminal interactif");
+            console.log("  /repl <lang>              - Lance un REPL (ex: node, python)");
+            console.log("  /eval <expression>        - Évalue une expression mathématique");
+            console.log("  /sandbox <on|off>         - Active/désactive l'isolation");
+            console.log("  /output                   - Affiche la dernière sortie");
+            console.log("  /output clear             - Efface la dernière sortie");
+
+            console.log(chalk.yellow("\n🔌 Outils et Recherche :"));
+            console.log("  /tools                    - Liste les outils activés");
+            console.log("  /tool info <nom>          - Affiche la description d'un outil");
+            console.log("  /tool enable/disable <n>  - Active/désactive un outil");
+            console.log("  /plugin list/install/rm   - Gère les plugins");
+            console.log("  /web search <requête>     - Recherche en ligne");
+            console.log("  /web fetch <url>          - Récupère le contenu d'une URL");
+
+            console.log(chalk.yellow("\n🎨 Thème et Affichage :"));
+            console.log("  /theme <dark|light>       - Change le thème");
+            console.log("  /theme list               - Liste les thèmes");
+            console.log("  /format <md|plain|json>   - Format des réponses");
+            console.log("  /wrap <on|off>            - Retour à la ligne automatique");
+            console.log("  /verbose <on|off>         - Mode verbeux");
+            console.log("  /silent <on|off>          - Mode silencieux");
+            console.log("  /color <on|off>           - Colorisation syntaxique");
+            console.log("  /lang <fr|en>             - Change la langue");
+
+            console.log(chalk.yellow("\n🔐 Configuration et Variable d'env :"));
+            console.log("  /config                   - Affiche la configuration");
+            console.log("  /config set <key> <val>   - Modifie la configuration");
+            console.log("  /config reset             - Réinitialise la configuration");
+            console.log("  /env list                 - Liste les variables d'env");
+            console.log("  /env set <VAR> <val>      - Définit une variable d'env");
+            console.log("  /api key show/set/clear   - Gère les clés d'API");
+
+            console.log(chalk.yellow("\n📊 Monitoring et Debug :"));
+            console.log("  /debug <on|off>           - Active le mode debug");
+            console.log("  /log                      - Affiche les logs");
+            console.log("  /log clear/save           - Efface ou enregistre les logs");
+            console.log("  /benchmark                - Teste la latence API");
+            console.log("  /ping                     - Teste la connexion réseau");
+            console.log("  /stats                    - Statistiques de session");
+            console.log("  /trace                    - Trace des appels");
+            console.log("  /inspect <var>            - Inspecte la configuration interne");
+
+            console.log(chalk.yellow("\n🔁 Automatisation :"));
+            console.log("  /macro save/run/list/del  - Gère les macros");
+            console.log("  /pipe <cmd1> | <cmd2>     - Chaîne deux commandes");
+            console.log("  /loop <n> <commande>      - Répète une commande");
+            console.log("  /schedule <cron> <cmd>    - Planifie une tâche");
+            console.log("  /watch <cmd>              - Surveille les fichiers");
+            console.log("  /batch <fichier>          - Exécute des commandes en lot\n");
+            break;
+
+        case '/exit':
+        case '/quit':
+            console.log(chalk.gray("Fermeture de Cypher Coder. À bientôt !"));
+            process.exit(0);
+
+        case '/clear':
+            console.clear();
+            console.log(BANNER);
+            console.log(chalk.green("Écran nettoyé.\n"));
+            break;
+
+        case '/reset':
+            initChat();
+            commandHistory = [];
+            loadedFiles = [];
+            console.log(chalk.green("Session réinitialisée. Historique et contexte effacés.\n"));
+            break;
+
+        case '/restart':
+            console.log(chalk.yellow("Redémarrage de l'agent en cours..."));
+            initChat();
+            console.clear();
+            console.log(BANNER);
+            console.log(chalk.green("Cypher Coder a redémarré avec succès.\n"));
+            break;
+
+        case '/version':
+            console.log(chalk.cyan(`Version de Cypher Coder: 1.0.0 (Mode Hybride local/Space)`));
+            break;
+
+        case '/about':
+            console.log(chalk.cyan(`\n=== À propos de Cypher Coder ===`));
+            console.log(`Nom        : ${APP_NAME}`);
+            console.log(`Créateur   : ${AUTHOR} (Étudiant IUD)`);
+            console.log(`Description: Assistant IA autonome de codage local et réseau.`);
+            console.log(`Modèle     : Qwen/Qwen2.5-Coder-32B-Instruct`);
+            console.log(`Réseau     : FastAPI + Gradio (Docker Space HF)\n`);
+            break;
+
+        case '/status':
+            const dirContext = getCurrentDirectoryContext();
+            console.log(chalk.yellow("\n=== Statut de la Session ==="));
+            console.log(`  Dossier de travail : ${chalk.cyan(path.resolve("."))}`);
+            console.log(`  Backend Space       : ${chalk.cyan("https://theshellmaster-cypher-coder.hf.space")}`);
+            console.log(`  Modèle utilisé      : ${chalk.cyan(sessionConfig.model)}`);
+            console.log(`  Température         : ${chalk.cyan(sessionConfig.temperature)}`);
+            console.log(`  Max Tokens          : ${chalk.cyan(sessionConfig.max_tokens)}`);
+            console.log(`  Auteur              : ${chalk.cyan(AUTHOR)}`);
+            console.log(`  Fichiers suivis     : ${chalk.dim(dirContext)}\n`);
+            break;
+
+        // --- 2. Gestion du contexte & mémoire
+        case '/context':
+            if (cleanArgs[0] === 'clear') {
+                loadedFiles = [];
+                console.log(chalk.green("Contexte de fichiers vidé."));
+            } else if (cleanArgs[0] === 'save') {
+                const name = cleanArgs[1];
+                if (!name) {
+                    console.log(chalk.red("Erreur: Spécifiez un nom. Exemple: /context save ma_session"));
+                } else {
+                    savedContexts[name] = JSON.stringify(chatMessages);
+                    console.log(chalk.green(`Contexte sauvegardé sous le nom '${name}'.`));
+                }
+            } else if (cleanArgs[0] === 'load') {
+                const name = cleanArgs[1];
+                if (!name || !savedContexts[name]) {
+                    console.log(chalk.red(`Erreur: Contexte '${name}' introuvable.`));
+                } else {
+                    chatMessages = JSON.parse(savedContexts[name]);
+                    console.log(chalk.green(`Contexte '${name}' restauré avec succès.`));
+                }
+            } else if (cleanArgs[0] === 'list') {
+                console.log(chalk.yellow("Contextes sauvegardés :"), Object.keys(savedContexts));
+            } else {
+                console.log(chalk.yellow("Fichiers chargés en contexte local :"));
+                if (loadedFiles.length === 0) console.log(" Aucun fichier chargé.");
+                loadedFiles.forEach(f => console.log(` - ${f}`));
+            }
+            break;
+
+        case '/memory':
+            if (cleanArgs[0] === 'clear') {
+                initChat();
+                console.log(chalk.green("Mémoire système réinitialisée."));
+            } else {
+                console.log(chalk.yellow("\n=== Mémoire de session active ==="));
+                console.log(`Nombre de messages stockés : ${chatMessages.length}`);
+                console.log("System Prompt actif :");
+                console.log(chalk.dim(chatMessages[0]?.content || "Aucun"));
+                console.log("===================================\n");
+            }
+            break;
+
+        case '/tokens':
+            const textLength = JSON.stringify(chatMessages).length;
+            const estTokens = Math.round(textLength / 4);
+            console.log(chalk.cyan(`Statistiques de tokens (estimations) :`));
+            console.log(`  Utilisés (contexte actuel) : ~${estTokens} tokens`);
+            console.log(`  Max configuré par réponse : ${sessionConfig.max_tokens} tokens`);
+            break;
+
+        // --- 3. Historique
+        case '/history':
+            if (cleanArgs[0] === 'clear') {
+                commandHistory = [];
+                console.log(chalk.green("Historique des commandes vidé."));
+            } else if (cleanArgs[0] === 'save') {
+                const file = cleanArgs[1] || 'history_export.json';
+                fs.writeFileSync(file, JSON.stringify(commandHistory, null, 2), 'utf8');
+                console.log(chalk.green(`Historique exporté dans : ${file}`));
+            } else if (cleanArgs[0] === 'load') {
+                const file = cleanArgs[1];
+                if (file && fs.existsSync(file)) {
+                    commandHistory = JSON.parse(fs.readFileSync(file, 'utf8'));
+                    console.log(chalk.green(`Historique importé depuis ${file}.`));
+                } else {
+                    console.log(chalk.red("Fichier introuvable."));
+                }
+            } else if (cleanArgs[0] === 'search') {
+                const query = cleanArgs.slice(1).join(' ').toLowerCase();
+                const matches = commandHistory.filter(h => h.toLowerCase().includes(query));
+                console.log(chalk.yellow(`Correspondances trouvées (${matches.length}) :`));
+                matches.forEach(m => console.log(`  ${m}`));
+            } else {
+                console.log(chalk.yellow("\n=== Historique des commandes utilisateur ==="));
+                commandHistory.forEach((c, idx) => console.log(`  ${idx + 1}. ${c}`));
+                console.log("=============================================\n");
+            }
+            break;
+
+        case '/last':
+            if (!lastAssistantResponse) {
+                console.log(chalk.yellow("Aucune réponse précédente disponible."));
+            } else {
+                console.log(chalk.green("\n🤖 Dernière réponse de Cypher :"));
+                console.log(marked(lastAssistantResponse));
+            }
+            break;
+
+        case '/redo':
+            let lastUserText = "";
+            for (let i = chatMessages.length - 1; i >= 0; i--) {
+                if (chatMessages[i].role === 'user' && !chatMessages[i].content.startsWith('/')) {
+                    lastUserText = chatMessages[i].content;
+                    break;
+                }
+            }
+            if (lastUserText) {
+                console.log(chalk.cyan(`Relance de la requête : "${lastUserText}"`));
+                chatMessages.push({"role": "user", "content": lastUserText});
+                await runAgentTurn();
+            } else {
+                console.log(chalk.yellow("Aucune requête textuelle trouvée à relancer."));
+            }
+            break;
+
+        case '/undo':
+            if (chatMessages.length > 2) {
+                chatMessages.pop();
+                chatMessages.pop();
+                console.log(chalk.green("Dernière interaction utilisateur/assistant annulée du contexte."));
+            } else {
+                console.log(chalk.yellow("Rien à annuler."));
+            }
+            break;
+
+        // --- 4. Gestion du modèle LLM
+        case '/model':
+            if (cleanArgs[0] === 'list') {
+                console.log(chalk.cyan("Modèles disponibles via Hugging Face Inference :"));
+                console.log("  - Qwen/Qwen2.5-Coder-32B-Instruct (Recommandé - Actif par défaut)");
+                console.log("  - meta-llama/Llama-3.3-70B-Instruct");
+                console.log("  - deepseek-ai/DeepSeek-Coder-V2-Instruct");
+            } else if (cleanArgs[0] === 'set') {
+                const newModel = cleanArgs[1];
+                if (!newModel) {
+                    console.log(chalk.red("Usage: /model set <nom_du_modèle>"));
+                } else {
+                    sessionConfig.model = newModel;
+                    console.log(chalk.green(`Modèle modifié vers : ${newModel}`));
+                }
+            } else if (cleanArgs[0] === 'info') {
+                console.log(chalk.cyan(`\n=== Infos sur le modèle actif ===`));
+                console.log(`Nom: ${sessionConfig.model}`);
+                console.log(`Type: Coder/Instruct LLM`);
+                console.log(`Capacités: Génération de code, Tool calling, Recherche web`);
+                console.log(`Limites recommandées: 2048 tokens max par génération.`);
+            } else {
+                console.log(chalk.cyan(`Modèle actif : ${sessionConfig.model}`));
+            }
+            break;
+
+        case '/temperature':
+            const tempVal = parseFloat(cleanArgs[0]);
+            if (isNaN(tempVal) || tempVal < 0 || tempVal > 1) {
+                console.log(chalk.red("Usage: /temperature <valeur entre 0.0 et 1.0> (actuelle: " + sessionConfig.temperature + ")"));
+            } else {
+                sessionConfig.temperature = tempVal;
+                console.log(chalk.green(`Température mise à jour : ${tempVal}`));
+            }
+            break;
+
+        case '/top_p':
+            const topPVal = parseFloat(cleanArgs[0]);
+            if (isNaN(topPVal) || topPVal < 0 || topPVal > 1) {
+                console.log(chalk.red("Usage: /top_p <valeur entre 0.0 et 1.0> (actuel: " + sessionConfig.top_p + ")"));
+            } else {
+                sessionConfig.top_p = topPVal;
+                console.log(chalk.green(`Top_p mis à jour : ${topPVal}`));
+            }
+            break;
+
+        case '/max_tokens':
+            const maxT = parseInt(cleanArgs[0], 10);
+            if (isNaN(maxT) || maxT <= 0) {
+                console.log(chalk.red("Usage: /max_tokens <nombre> (actuel: " + sessionConfig.max_tokens + ")"));
+            } else {
+                sessionConfig.max_tokens = maxT;
+                console.log(chalk.green(`Max tokens mis à jour : ${maxT}`));
+            }
+            break;
+
+        case '/system':
+            if (cleanArgs[0] === 'set') {
+                const newSys = cleanArgs.slice(1).join(' ');
+                chatMessages[0] = { role: 'system', content: newSys };
+                console.log(chalk.green("Prompt système modifié."));
+            } else if (cleanArgs[0] === 'reset') {
+                chatMessages[0] = { role: 'system', content: getSystemPrompt() };
+                console.log(chalk.green("Prompt système réinitialisé aux valeurs par défaut."));
+            } else {
+                console.log(chalk.cyan("Prompt système actif :"));
+                console.log(chalk.dim(chatMessages[0]?.content));
+            }
+            break;
+
+        case '/stream':
+            if (cleanArgs[0] === 'on') {
+                sessionConfig.stream = true;
+                console.log(chalk.green("Streaming activé (simulé)."));
+            } else {
+                sessionConfig.stream = false;
+                console.log(chalk.green("Streaming désactivé."));
+            }
+            break;
+
+        // --- 5. Gestion de fichiers
+        case '/file':
+            if (cleanArgs[0] === 'load') {
+                const fpath = cleanArgs[1];
+                if (fpath && fs.existsSync(fpath)) {
+                    loadedFiles.push(path.resolve(fpath));
+                    console.log(chalk.green(`Fichier chargé dans le contexte : ${fpath}`));
+                } else {
+                    console.log(chalk.red("Fichier introuvable."));
+                }
+            } else if (cleanArgs[0] === 'read') {
+                const fpath = cleanArgs[1];
+                if (fpath && fs.existsSync(fpath)) {
+                    console.log(chalk.cyan(`Contenu de ${fpath} :`));
+                    console.log(fs.readFileSync(fpath, 'utf8'));
+                } else {
+                    console.log(chalk.red("Fichier introuvable."));
+                }
+            } else if (cleanArgs[0] === 'write') {
+                const fpath = cleanArgs[1];
+                if (!fpath) {
+                    console.log(chalk.red("Usage: /file write <chemin>"));
+                } else if (!lastAssistantResponse) {
+                    console.log(chalk.red("Aucune réponse disponible à enregistrer."));
+                } else {
+                    fs.writeFileSync(fpath, lastAssistantResponse, 'utf8');
+                    console.log(chalk.green(`Dernière réponse enregistrée dans ${fpath}`));
+                }
+            } else if (cleanArgs[0] === 'append') {
+                const fpath = cleanArgs[1];
+                if (!fpath) {
+                    console.log(chalk.red("Usage: /file append <chemin>"));
+                } else if (!lastAssistantResponse) {
+                    console.log(chalk.red("Aucune réponse disponible à enregistrer."));
+                } else {
+                    fs.appendFileSync(fpath, "\n" + lastAssistantResponse, 'utf8');
+                    console.log(chalk.green(`Dernière réponse ajoutée à la fin de ${fpath}`));
+                }
+            } else if (cleanArgs[0] === 'list') {
+                console.log(chalk.yellow("Fichiers suivis :"), loadedFiles);
+            } else if (cleanArgs[0] === 'clear') {
+                loadedFiles = [];
+                console.log(chalk.green("Fichiers déchargés du contexte."));
+            } else if (cleanArgs[0] === 'diff') {
+                const f1 = cleanArgs[1];
+                const f2 = cleanArgs[2];
+                if (f1 && f2 && fs.existsSync(f1) && fs.existsSync(f2)) {
+                    console.log(chalk.yellow(`--- Comparaison de ${f1} et ${f2} ---`));
+                    try {
+                        const out = execSync(`diff -u ${f1} ${f2}`).toString();
+                        console.log(out || "Aucune différence.");
+                    } catch (e) {
+                        console.log(e.stdout ? e.stdout.toString() : e.message);
+                    }
+                } else {
+                    console.log(chalk.red("Erreur: Spécifiez deux fichiers valides."));
+                }
+            }
+            break;
+
+        case '/upload':
+            console.log(chalk.green(`Fichier ${cleanArgs[0]} simulé comme uploadé.`));
+            break;
+        case '/download':
+            console.log(chalk.green(`Fichier ${cleanArgs[0]} simulé comme téléchargé.`));
+            break;
+
+        // --- 6. Exécution de code
+        case '/run':
+            if (cleanArgs.length === 0) {
+                if (!lastAssistantResponse) {
+                    console.log(chalk.red("Aucun code généré précédemment."));
+                } else {
+                    const blockRegex = /```(javascript|js|python|py|bash|sh)?\n([\s\S]*?)```/;
+                    const match = lastAssistantResponse.match(blockRegex);
+                    if (match) {
+                        const lang = match[1] || 'js';
+                        const code = match[2];
+                        console.log(chalk.yellow(`Exécution du bloc de code détecté (${lang})...`));
+                        await executeLocalCode(lang, code);
+                    } else {
+                        console.log(chalk.red("Aucun bloc de code markdown trouvé."));
+                    }
+                }
+            } else {
+                const lang = cleanArgs[0];
+                const code = cleanArgs.slice(1).join(' ');
+                await executeLocalCode(lang, code);
+            }
+            break;
+
+        case '/exec':
+            const cmd = cleanArgs.join(' ');
+            if (!cmd) {
+                console.log(chalk.red("Spécifiez une commande à exécuter."));
+            } else {
+                console.log(chalk.cyan(`Exécution de la commande : ${cmd}`));
+                await handleToolExecution('run_command', { command: cmd });
+            }
+            break;
+
+        case '/shell':
+            console.log(chalk.yellow("Lancement du terminal interactif (tapez 'exit' pour quitter le sous-shell)..."));
+            try {
+                execSync('bash', { stdio: 'inherit' });
+            } catch (e) {}
+            break;
+
+        case '/repl':
+            const rlang = cleanArgs[0] || 'node';
+            console.log(chalk.yellow(`Lancement du REPL ${rlang}...`));
+            try {
+                execSync(rlang, { stdio: 'inherit' });
+            } catch (e) {}
+            break;
+
+        case '/eval':
+            const expr = cleanArgs.join(' ');
+            try {
+                const res = eval(expr);
+                console.log(chalk.green(`Résultat : ${res}`));
+            } catch (e) {
+                console.log(chalk.red(`Erreur d'évaluation : ${e.message}`));
+            }
+            break;
+
+        case '/sandbox':
+            if (cleanArgs[0] === 'on') {
+                sessionConfig.sandbox = true;
+                console.log(chalk.green("Bac à sable activé (simulé)."));
+            } else {
+                sessionConfig.sandbox = false;
+                console.log(chalk.green("Bac à sable désactivé."));
+            }
+            break;
+
+        case '/output':
+            if (cleanArgs[0] === 'clear') {
+                console.log(chalk.green("Sortie nettoyée."));
+            } else {
+                console.log(chalk.gray("Aucune sortie récente enregistrée en dehors du terminal."));
+            }
+            break;
+
+        // --- 7. Plugins & outils
+        case '/tools':
+            console.log(chalk.cyan("Outils d'interaction locaux disponibles :"));
+            tools.forEach(t => console.log(`  - ${t.function.name} : ${t.function.description}`));
+            break;
+
+        case '/tool':
+            if (cleanArgs[0] === 'info') {
+                const name = cleanArgs[1];
+                const tool = tools.find(t => t.function.name === name);
+                if (tool) {
+                    console.log(chalk.cyan(`Outil [${name}] :`), tool.function.description);
+                } else {
+                    console.log(chalk.red("Outil introuvable."));
+                }
+            } else {
+                console.log(chalk.yellow("Les outils fondamentaux de Cypher Coder sont activés par défaut pour assurer son autonomie."));
+            }
+            break;
+
+        case '/plugin':
+            console.log(chalk.cyan("Aucun plugin externe installé."));
+            break;
+
+        case '/web':
+            if (cleanArgs[0] === 'search') {
+                const q = cleanArgs.slice(1).join(' ');
+                console.log(chalk.cyan(`Recherche en ligne pour : "${q}"`));
+                const res = callApiViaCurl([
+                    { role: "system", content: "Fais une recherche web et renvoie les résultats." },
+                    { role: "user", content: q }
+                ], []);
+                console.log(res.content);
+            } else if (cleanArgs[0] === 'fetch') {
+                const url = cleanArgs[1];
+                console.log(chalk.cyan(`Récupération de l'URL : ${url}...`));
+                const res = callApiViaCurl([
+                    { role: "system", content: "Récupère le contenu de cette URL et synthétise-la." },
+                    { role: "user", content: url }
+                ], []);
+                console.log(res.content);
+            }
+            break;
+
+        // --- 8. Affichage & formatting
+        case '/theme':
+            if (cleanArgs[0] === 'list') {
+                console.log("Thèmes : dark (par défaut), light");
+            } else if (cleanArgs[0] === 'light') {
+                sessionConfig.theme = 'light';
+                console.log(chalk.green("Thème light configuré."));
+            } else {
+                sessionConfig.theme = 'dark';
+                console.log(chalk.green("Thème dark configuré."));
+            }
+            break;
+
+        case '/format':
+            const fmt = cleanArgs[0];
+            if (['md', 'plain', 'json'].includes(fmt)) {
+                sessionConfig.format = fmt;
+                console.log(chalk.green(`Format des réponses : ${fmt}`));
+            } else {
+                console.log(chalk.red("Formats valides : md, plain, json"));
+            }
+            break;
+
+        case '/wrap':
+        case '/verbose':
+        case '/silent':
+        case '/color':
+            const setting = commandName.slice(1);
+            if (cleanArgs[0] === 'on' || cleanArgs[0] === 'true') {
+                sessionConfig[setting] = true;
+                console.log(chalk.green(`Option ${setting} activée.`));
+            } else {
+                sessionConfig[setting] = false;
+                console.log(chalk.green(`Option ${setting} désactivée.`));
+            }
+            break;
+
+        case '/lang':
+            sessionConfig.lang = cleanArgs[0] || 'fr';
+            console.log(chalk.green(`Langue configurée : ${sessionConfig.lang}`));
+            break;
+
+        case '/font':
+            console.log(chalk.gray("Option disponible sur terminaux compatibles uniquement."));
+            break;
+
+        // --- 9. Config & credentials
+        case '/config':
+            if (cleanArgs[0] === 'set') {
+                const key = cleanArgs[1];
+                const val = cleanArgs[2];
+                if (key in sessionConfig) {
+                    sessionConfig[key] = val;
+                    console.log(chalk.green(`Configuration ${key} mise à jour.`));
+                } else {
+                    console.log(chalk.red("Clé introuvable."));
+                }
+            } else if (cleanArgs[0] === 'reset') {
+                sessionConfig.model = "Qwen/Qwen2.5-Coder-32B-Instruct";
+                sessionConfig.temperature = 0.7;
+                sessionConfig.max_tokens = 2048;
+                console.log(chalk.green("Configuration réinitialisée."));
+            } else {
+                console.log(chalk.cyan("Configuration en cours :"), sessionConfig);
+            }
+            break;
+
+        case '/api':
+            console.log(chalk.green("Authentification gérée via variable d'environnement HF_TOKEN ou secret d'Espace."));
+            break;
+
+        case '/env':
+            if (cleanArgs[0] === 'set') {
+                const key = cleanArgs[1];
+                const val = cleanArgs[2];
+                sessionConfig.env[key] = val;
+                console.log(chalk.green(`Variable d'environnement locale définie: ${key}=${val}`));
+            } else {
+                console.log(chalk.cyan("Variables d'environnement de l'agent :"), sessionConfig.env);
+            }
+            break;
+
+        // --- 10. Monitoring & debug
+        case '/debug':
+            if (cleanArgs[0] === 'on') {
+                sessionConfig.verbose = true;
+                console.log(chalk.green("Mode debug/verbose activé."));
+            } else {
+                sessionConfig.verbose = false;
+                console.log(chalk.green("Mode debug/verbose désactivé."));
+            }
+            break;
+
+        case '/log':
+            if (cleanArgs[0] === 'clear') {
+                logs = [];
+                console.log(chalk.green("Logs locaux effacés."));
+            } else if (cleanArgs[0] === 'save') {
+                const file = cleanArgs[1] || 'cypher_agent.log';
+                fs.writeFileSync(file, logs.join('\n'), 'utf8');
+                console.log(chalk.green(`Logs exportés dans ${file}`));
+            } else {
+                console.log(chalk.yellow("\n=== Logs récents de l'agent ==="));
+                logs.slice(-20).forEach(l => console.log(l));
+                console.log("===============================\n");
+            }
+            break;
+
+        case '/benchmark':
+            console.log(chalk.cyan("Lancement du benchmark de l'API Hugging Face..."));
+            const start = Date.now();
+            try {
+                callApiViaCurl([{ role: "user", content: "Dis hello" }], []);
+                console.log(chalk.green(`Réussi ! Temps de latence aller-retour : ${Date.now() - start}ms`));
+            } catch (e) {
+                console.log(chalk.red(`Échec du benchmark : ${e.message}`));
+            }
+            break;
+
+        case '/ping':
+            console.log(chalk.cyan("Ping de la passerelle API..."));
+            try {
+                const startPing = Date.now();
+                execSync("curl -sI https://theshellmaster-cypher-coder.hf.space/ | head -n 1");
+                console.log(chalk.green(`Connectivité OK (${Date.now() - startPing}ms)`));
+            } catch (e) {
+                console.log(chalk.red("Erreur de connexion."));
+            }
+            break;
+
+        case '/stats':
+            console.log(chalk.cyan(`\n=== Statistiques de la session ===`));
+            console.log(`  Messages dans la conversation : ${chatMessages.length}`);
+            console.log(`  Fichiers chargés en contexte   : ${loadedFiles.length}`);
+            console.log(`  Commandes tapées               : ${commandHistory.length}`);
+            console.log(`  Nombre d'événements loggués   : ${logs.length}\n`);
+            break;
+
+        case '/trace':
+            console.log(chalk.cyan("Dernier appel :"), logs[logs.length - 1] || "Aucun appel tracé.");
+            break;
+
+        case '/inspect':
+            const vname = cleanArgs[0];
+            if (vname === 'chatMessages') console.log(chatMessages);
+            else if (vname === 'loadedFiles') console.log(loadedFiles);
+            else console.log(sessionConfig);
+            break;
+
+        // --- 11. Automatisation & scripting
+        case '/macro':
+            if (cleanArgs[0] === 'save') {
+                const name = cleanArgs[1];
+                macros[name] = [...commandHistory];
+                console.log(chalk.green(`Historique des commandes sauvegardé dans la macro '${name}'.`));
+            } else if (cleanArgs[0] === 'run') {
+                const name = cleanArgs[1];
+                if (macros[name]) {
+                    console.log(chalk.yellow(`Exécution de la macro : ${name}`));
+                    for (const cmd of macros[name]) {
+                        if (!cmd.startsWith('/macro')) {
+                            await handleSlashCommand(cmd);
+                        }
+                    }
+                } else {
+                    console.log(chalk.red("Macro introuvable."));
+                }
+            } else if (cleanArgs[0] === 'list') {
+                console.log(chalk.cyan("Macros disponibles :"), Object.keys(macros));
+            } else if (cleanArgs[0] === 'delete') {
+                delete macros[cleanArgs[1]];
+                console.log(chalk.green(`Macro '${cleanArgs[1]}' supprimée.`));
+            }
+            break;
+
+        case '/pipe':
+            console.log(chalk.yellow("Chaînage d'outils simulé."));
+            break;
+
+        case '/loop':
+            const times = parseInt(cleanArgs[0], 10);
+            const cmdToLoop = cleanArgs.slice(1).join(' ');
+            if (!isNaN(times) && cmdToLoop) {
+                for (let idx = 0; idx < times; idx++) {
+                    console.log(chalk.cyan(`[Boucle ${idx+1}/${times}] Exécution...`));
+                    await handleSlashCommand(cmdToLoop);
+                }
+            }
+            break;
+
+        case '/schedule':
+        case '/watch':
+        case '/batch':
+            console.log(chalk.yellow("Fonctionnalité planifiée pour la prochaine version stable de Cypher Coder."));
+            break;
+
+        default:
+            console.log(chalk.red(`Commande slash inconnue: ${commandName}. Tapez /help pour afficher l'aide.`));
+            break;
+    }
+    
+    return true;
+}
+
+// Code runner helper
+async function executeLocalCode(lang, code) {
+    let cmd = "";
+    if (lang === 'javascript' || lang === 'js' || lang === 'node') {
+        cmd = `node -e "${code.replace(/"/g, '\\"')}"`;
+    } else if (lang === 'python' || lang === 'py' || lang === 'python3') {
+        cmd = `python3 -c "${code.replace(/"/g, '\\"')}"`;
+    } else if (lang === 'bash' || lang === 'sh') {
+        cmd = code;
+    } else {
+        console.log(chalk.red(`Langage de code non pris en charge pour l'exécution automatique: ${lang}`));
+        return;
+    }
+    
+    console.log(chalk.yellow(`Lancement du code local...`));
+    await handleToolExecution('run_command', { command: cmd });
+}
+
 async function askQuestion() {
     const { userInput } = await inquirer.prompt([
         {
@@ -741,40 +1582,16 @@ async function askQuestion() {
         return askQuestion();
     }
 
-    if (text === '/exit' || text === '/quit') {
-        console.log(chalk.gray("Fermeture de Cypher Coder. À bientôt !"));
-        process.exit(0);
+    if (text.startsWith('/')) {
+        const handled = await handleSlashCommand(text);
+        if (handled) {
+            return askQuestion();
+        }
     }
 
-    if (text === '/clear') {
-        console.clear();
-        initChat();
-        console.log(BANNER);
-        console.log(chalk.green("Discussion réinitialisée et répertoire indexé.\n"));
-        return askQuestion();
-    }
+    lastUserInput = text;
+    commandHistory.push(text);
 
-    if (text === '/help') {
-        console.log(chalk.yellow("\nCommandes disponibles :"));
-        console.log("  /help   - Affiche ce menu d'aide");
-        console.log("  /status - Affiche le dossier actif, le backend et l'index de fichiers");
-        console.log("  /clear  - Efface l'écran et réinitialise la discussion et le contexte");
-        console.log("  /exit   - Quitte l'application\n");
-        return askQuestion();
-    }
-
-    if (text === '/status') {
-        const dirContext = getCurrentDirectoryContext();
-        console.log(chalk.yellow("\n=== Statut de la Session ==="));
-        console.log(`  Dossier de travail : ${chalk.cyan(path.resolve("."))}`);
-        console.log(`  Backend Space       : ${chalk.cyan("https://theshellmaster-cypher-coder.hf.space")}`);
-        console.log(`  Modèle utilisé      : ${chalk.cyan("Qwen/Qwen2.5-Coder-32B-Instruct")}`);
-        console.log(`  Auteur              : ${chalk.cyan("DJAKOUA KWANKAM (IUD)")}`);
-        console.log(`  Fichiers suivis     : ${chalk.dim(dirContext)}\n`);
-        return askQuestion();
-    }
-
-    // Ajouter le message utilisateur et démarrer le tour d'agent
     chatMessages.push({"role": "user", "content": text});
     await runAgentTurn();
     

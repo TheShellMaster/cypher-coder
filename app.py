@@ -38,6 +38,12 @@ async def chat(request: Request):
         messages = body.get("messages", [])
         client_tools = body.get("tools", [])
         
+        # dynamic inference parameters
+        model = body.get("model", "Qwen/Qwen2.5-Coder-32B-Instruct")
+        temperature = body.get("temperature", None)
+        top_p = body.get("top_p", None)
+        max_tokens = body.get("max_tokens", 2048)
+        
         # Associer les outils locaux du client et l'outil de recherche web du serveur
         all_tools = list(client_tools)
         search_tool_def = {
@@ -62,9 +68,12 @@ async def chat(request: Request):
         # Boucle d'agent côté serveur pour exécuter search_web de manière transparente
         while True:
             response = client.chat_completion(
+                model=model,
                 messages=messages,
                 tools=all_tools,
-                max_tokens=2048,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
                 stream=False
             )
             choice = response.choices[0]
