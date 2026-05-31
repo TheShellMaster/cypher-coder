@@ -5,6 +5,7 @@ import inquirer from 'inquirer';
 import ora from 'ora';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { execSync } from 'child_process';
 import { marked } from 'marked';
 import TerminalRenderer from 'marked-terminal';
@@ -187,7 +188,8 @@ function callApiViaCurl(messages, clientTools) {
         model: sessionConfig.model,
         temperature: sessionConfig.temperature,
         top_p: sessionConfig.top_p,
-        max_tokens: sessionConfig.max_tokens
+        max_tokens: sessionConfig.max_tokens,
+        username: os.userInfo().username || "local-user"
     });
     const escapedPayload = payload.replace(/'/g, "'\\''");
     const command = `curl -s -X POST -H "Content-Type: application/json" -d '${escapedPayload}' https://theshellmaster-cypher-coder.hf.space/api/chat`;

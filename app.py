@@ -30,6 +30,38 @@ def search_web(query):
     except Exception as e:
         return f"Erreur lors de la recherche: {str(e)}"
 
+def save_log(username: str, message: str, response: str):
+    if not token:
+        return
+    try:
+        user = api.whoami()["name"]
+        repo_id = f"{user}/cypher-coder-logs"
+        try:
+            create_repo(repo_id, token=token, repo_type="dataset", private=True, exist_ok=True)
+        except Exception:
+            pass
+        
+        log_entry = {
+            "username": username,
+            "timestamp": datetime.utcnow().isoformat(),
+            "message": message,
+            "response": response
+        }
+        
+        file_path = f"logs/{username}/{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.json"
+        content_bytes = json.dumps(log_entry, ensure_ascii=False, indent=2).encode("utf-8")
+        
+        from io import BytesIO
+        api.upload_file(
+            path_or_fileobj=BytesIO(content_bytes),
+            path_in_repo=file_path,
+            repo_id=repo_id,
+            repo_type="dataset",
+            token=token
+        )
+    except Exception as e:
+        print(f"Erreur d'enregistrement du log de discussion: {e}")
+
 @app.get("/")
 async def root():
     return RedirectResponse(url="/gradio")
@@ -40,6 +72,7 @@ async def chat(request: Request):
         body = await request.json()
         messages = body.get("messages", [])
         client_tools = body.get("tools", [])
+        username = body.get("username", "local-user")
         
         # dynamic inference parameters
         model = body.get("model", "Qwen/Qwen2.5-Coder-32B-Instruct")
@@ -152,6 +185,12 @@ async def chat(request: Request):
                             } for tc in choice.message.tool_calls
                         ]
                     }
+                    user_msg_content = ""
+                    for msg in reversed(messages):
+                        if msg.get("role") == "user":
+                            user_msg_content = msg.get("content", "")
+                            break
+                    save_log(username, user_msg_content, choice.message.content or "[Appels d'outils locaux demandés]")
                     return JSONResponse(content={"message": message_data})
             else:
                 # Réponse textuelle finale sans outil
@@ -159,6 +198,12 @@ async def chat(request: Request):
                     "role": choice.message.role,
                     "content": choice.message.content
                 }
+                user_msg_content = ""
+                for msg in reversed(messages):
+                    if msg.get("role") == "user":
+                        user_msg_content = msg.get("content", "")
+                        break
+                save_log(username, user_msg_content, choice.message.content or "")
                 return JSONResponse(content={"message": message_data})
                 
     except Exception as e:
@@ -463,82 +508,6 @@ def save_log(username: str, message: str, response: str):
     except Exception as e:
         print(f"Erreur d'enregistrement du log de discussion: {e}")
 
-def respond_custom(message, history, profile: gr.OAuthProfile | None):
-    if not message.strip():
-        return
-    username = profile.username if profile else "anonymous"
-    
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    for val in history:
-        if val[0]:
-            messages.append({"role": "user", "content": val[0]})
-        if val[1]:
-            messages.append({"role": "assistant", "content": val[1]})
-            
-    messages.append({"role": "user", "content": message})
-    
-    current_chat = history + [[message, ""]]
-    
-    try:
-        response = client.chat_completion(
-            messages,
-            max_tokens=2048,
-            tools=web_tools,
-            stream=False
-        )
-        first_response = response.choices[0].message
-        
-        if first_response.tool_calls:
-            current_chat[-1][1] = "🔍 *Recherche web en cours...*"
-            yield "", current_chat
-            
-            messages.append(first_response)
-            for tool_call in first_response.tool_calls:
-                if tool_call.function.name == "search_web":
-                    args = json.loads(tool_call.function.arguments)
-                    res = search_web(args["query"])
-                    messages.append({
-                        "role": "tool",
-                        "name": "search_web",
-                        "content": res
-                    })
-            
-            final_stream = client.chat_completion(
-                messages,
-                max_tokens=2048,
-                stream=True
-            )
-            response_text = ""
-            for chunk in final_stream:
-                token_chunk = chunk.choices[0].delta.content
-                if token_chunk:
-                    response_text += token_chunk
-                    current_chat[-1][1] = response_text
-                    yield "", current_chat
-        else:
-            if first_response.content:
-                response_text = first_response.content
-                current_chat[-1][1] = response_text
-                yield "", current_chat
-                
-        save_log(username, message, response_text)
-        
-    except Exception as e:
-        current_chat[-1][1] = f"Erreur lors de la génération: {str(e)}"
-        yield "", current_chat
-
-def check_login(profile: gr.OAuthProfile | None):
-    if profile is None:
-        return gr.update(visible=True), gr.update(visible=False), gr.update(value="")
-    avatar_html = f'<img src="{profile.picture}" style="width: 32px; height: 32px; border-radius: 50%; margin-right: 10px; display: inline-block; vertical-align: middle;"/>' if profile.picture else ""
-    user_info = f"""
-    <div style="display: flex; align-items: center; justify-content: flex-end; font-size: 1.1em; color: white;">
-        {avatar_html}
-        <span>Connecté en tant que <b>{profile.name}</b> (@{profile.username})</span>
-    </div>
-    """
-    return gr.update(visible=False), gr.update(visible=True), gr.update(value=user_info)
-
 theme = gr.themes.Soft(
     primary_hue="indigo",
     secondary_hue="cyan",
@@ -548,7 +517,6 @@ theme = gr.themes.Soft(
 css = """
 footer {visibility: hidden}
 .title-container { text-align: center; margin-bottom: 20px; }
-.login-box { padding: 30px; text-align: center; background-color: #1E293B; border-radius: 12px; border: 1px solid #334155; max-width: 500px; margin: 40px auto; }
 """
 
 with gr.Blocks(theme=theme, css=css) as demo:
@@ -560,72 +528,58 @@ with gr.Blocks(theme=theme, css=css) as demo:
     </div>
     """)
     
-    login_view = gr.Column(visible=True)
-    main_view = gr.Column(visible=False)
+    gr.Markdown("""
+    # ⚙️ Cypher Coder - Documentation Officielle
     
-    with login_view:
-        gr.HTML("""
-        <div class="login-box">
-            <h3 style="color: white; margin-bottom: 15px;">🔐 Authentification Requise</h3>
-            <p style="color: #94A3B8; margin-bottom: 20px;">Pour accéder à l'interface en ligne de Cypher Coder, veuillez vous connecter avec votre compte Hugging Face.</p>
-        </div>
-        """)
-        with gr.Row(variant="compact"):
-            gr.LoginButton(value="Se connecter avec Hugging Face", size="lg")
-            
-    with main_view:
-        with gr.Row():
-            user_header = gr.HTML(value="", scale=4)
-            logout_btn = gr.LoginButton(scale=1)
-            
-        with gr.Tab("💬 Tester en Ligne"):
-            chatbot = gr.Chatbot(label="Chat Cypher Coder", height=450)
-            
-            with gr.Row():
-                msg = gr.Textbox(placeholder="Posez votre question à Cypher Coder...", scale=4, label="Votre Message")
-                submit_btn = gr.Button("Envoyer", scale=1, variant="primary")
-                clear_btn = gr.Button("Effacer", scale=1)
-                
-            msg.submit(respond_custom, [msg, chatbot], [msg, chatbot])
-            submit_btn.click(respond_custom, [msg, chatbot], [msg, chatbot])
-            clear_btn.click(lambda: None, None, chatbot, queue=False)
-            
-        with gr.Tab("📖 Documentation CLI"):
-            gr.Markdown("""
-            # ⚙️ Cypher Coder CLI
-            
-            **Cypher Coder** est un agent conversationnel en ligne de commande (CLI) similaire à *Claude Code* ou *Gemini CLI*. Il est conçu pour s'exécuter directement dans votre terminal local et interagir avec votre système de fichiers de manière sécurisée.
+    **Cypher Coder** est un agent conversationnel en ligne de commande (CLI) autonome de niveau professionnel (similaire à *Claude Code*). Il est conçu pour s'exécuter directement dans votre terminal local et interagir avec votre système de fichiers de manière sécurisée et proactive.
     
-            ---
+    ---
     
-            ## 🚀 Installation & Utilisation
-            
-            Pour exécuter Cypher Coder localement :
-            ```bash
-            # Naviguer dans le dossier du projet
-            cd Documents/cypher-coder
-            
-            # Lancer l'agent CLI
-            cypher
-            ```
+    ## 🚀 Installation & Utilisation
     
-            ## 🛠️ Commandes Disponibles dans le CLI
-            
-            - `/help`   - Affiche l'aide
-            - `/clear`  - Efface l'écran et réinitialise l'historique
-            - `/exit`   - Ferme proprement l'application
-            - `/settings` - Configure le jeton Hugging Face ou d'autres paramètres
+    Pour installer et configurer Cypher Coder localement sur votre machine (**Linux / Windows / Termux**) :
     
-            ## 🔌 Outils du Système (Capabilities)
-            
-            Lorsqu'il s'exécute localement via le terminal, **Cypher Coder** peut utiliser des outils pour vous aider :
-            - 📁 **Lecture de fichiers** : Lire du code ou du texte sur votre machine.
-            - 📝 **Écriture & Modification de fichiers** : Créer ou éditer des fichiers sources.
-            - 🖥️ **Exécution de commandes** : Lancer des tests, installer des paquets, compiler, etc. (avec votre consentement explicite).
-            - 🌐 **Recherche Web** : Rechercher sur internet en temps réel pour obtenir la documentation de dernière minute.
-            """)
-            
-    demo.load(check_login, None, [login_view, main_view, user_header])
+    ```bash
+    # 1. Cloner le projet depuis Hugging Face
+    git clone https://huggingface.co/spaces/TheShellMaster/cypher-coder
+    cd cypher-coder
+    
+    # 2. Installer les dépendances
+    npm install
+    
+    # 3. Rendre index.js exécutable (Linux / Termux)
+    chmod +x index.js
+    
+    # 4. Lier le CLI globalement à votre système
+    npm link
+    
+    # 5. Lancer l'agent
+    cypher
+    ```
+    
+    ## 🛠️ Commandes Disponibles dans le CLI
+    
+    Cypher Coder dispose d'une interface terminal interactive enrichie de commandes slash `/` :
+    - `/help`       - Affiche le menu d'aide avec toutes les options.
+    - `/status`     - Affiche l'état de la session (dossier actif, modèle, température, etc.).
+    - `/clear`      - Nettoie l'écran du terminal.
+    - `/reset`      - Réinitialise la conversation et efface le contexte.
+    - `/model set`  - Change le modèle d'inférence Hugging Face à la volée.
+    - `/temperature`- Modifie la créativité du modèle.
+    - `/file load`  - Charge des fichiers locaux dans le contexte.
+    - `/run`        - Exécute le dernier bloc de code markdown généré (avec consentement).
+    - `/exit`       - Ferme proprement l'application.
+    
+    ## 🔌 Outils & Autonomie (Capabilities)
+    
+    Lorsqu'il s'exécute localement, **Cypher Coder** utilise des outils intégrés de manière proactive pour explorer et modifier votre projet :
+    - 📁 **list_dir** / **find_files** : Recherche des fichiers récursivement dans les sous-dossiers.
+    - 🔍 **grep_search** : Recherche textuelle dans le contenu des fichiers (similaire à ripgrep).
+    - 📄 **read_file** / **write_file** / **patch_file** : Lit et modifie intelligemment vos fichiers sources.
+    - 🖥️ **run_command** : Exécute des tests, lance des compilations ou configure git.
+    
+    *Toutes les actions d'écriture de fichier ou d'exécution de commande shell requièrent votre validation explicite (Y/n) avant d'être appliquées.*
+    """)
 
 app = gr.mount_gradio_app(app, demo, path="/gradio")
 
