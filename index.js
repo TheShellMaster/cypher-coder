@@ -10,16 +10,31 @@ import { execSync } from 'child_process';
 import { marked } from 'marked';
 import TerminalRenderer from 'marked-terminal';
 
+const theme = {
+    agent: chalk.hex('#00FFAA'),
+    user: chalk.hex('#C792EA'),
+    command: chalk.hex('#FFD700'),
+    error: chalk.hex('#FF5555'),
+    info: chalk.hex('#569CD6'),
+    border: chalk.hex('#2A2A2A'),
+    text: chalk.hex('#E0E0E0')
+};
+
 // Configurer le rendu Markdown pour le terminal (styles chalk)
 marked.setOptions({
     renderer: new TerminalRenderer({
-        code: chalk.yellow,
-        blockquote: chalk.gray.italic,
-        html: chalk.gray,
-        heading: chalk.cyan.bold,
-        firstHeading: chalk.cyan.bold,
-        listitem: chalk.white,
-        table: chalk.gray,
+        code: theme.command,
+        blockquote: theme.agent,
+        html: theme.agent,
+        heading: theme.info,
+        firstHeading: theme.info,
+        listitem: theme.agent,
+        table: theme.agent,
+        strong: theme.agent,
+        em: theme.agent,
+        link: theme.info,
+        href: theme.info,
+        unstyled: theme.agent,
         tab: 2
     })
 });
@@ -58,16 +73,15 @@ function addLog(level, message) {
     logs.push(logItem);
 }
 
-// Banner ASCII Art pour l'interface de démarrage
-const BANNER = chalk.cyan.bold(`
+const BANNER = theme.info(`
    _____             _---------------+
   / ____|           | |  ____  _      |
  | |    _   _ _ __  | |__|  _ \\| |    |  CYPHER CODER CLI
  | |   | | | | '_ \\ |  __  |_) | |    |  L'IA experte en développement local
  | |___| |_| | |_) || |  |  __/| |___ |  Créé par ${AUTHOR}
-   \\_____\\__, | .__/ |_|  |_|   |_____||  Institut Universitaire de Technologie de Douala (IUT)
-         __/ | |                      |
-        |___/|_|                      +-----------------------+
+    \\_____\\__, | .__/ |_|  |_|   |_____|
+          __/ | |
+         |___/|_|                      +-----------------------+
 `);
 
 // -----------------------------------------------------
@@ -261,7 +275,7 @@ async function handleToolExecution(name, args) {
         case 'write_file':
             try {
                 const targetPath = path.resolve(args.path);
-                console.log(chalk.yellow(`\n📂 Cypher Coder veut modifier/créer le fichier : ${chalk.cyan(targetPath)}`));
+                console.log(theme.info(`\nCypher Coder veut modifier/créer le fichier : ${chalk.cyan(targetPath)}`));
                 const { confirmWrite } = await inquirer.prompt([
                     {
                         type: 'confirm',
@@ -290,7 +304,7 @@ async function handleToolExecution(name, args) {
         case 'patch_file':
             try {
                 const targetPath = path.resolve(args.path);
-                console.log(chalk.yellow(`\n📝 Cypher Coder veut modifier un bloc de code dans : ${chalk.cyan(targetPath)}`));
+                console.log(theme.info(`\nCypher Coder veut modifier un bloc de code dans : ${chalk.cyan(targetPath)}`));
                 
                 console.log(chalk.dim("--- BLOC À RECHERCHER ---"));
                 console.log(chalk.red(args.search));
@@ -412,7 +426,7 @@ async function handleToolExecution(name, args) {
             
         case 'run_command':
             try {
-                console.log(chalk.yellow(`\n🖥️ Cypher Coder veut exécuter la commande suivante :`));
+                console.log(theme.info(`\nCypher Coder veut exécuter la commande suivante :`));
                 console.log(chalk.bgBlack.white(`  $ ${args.command}  `));
                 
                 const { confirmCommand } = await inquirer.prompt([
@@ -440,6 +454,36 @@ async function handleToolExecution(name, args) {
         default:
             return `Erreur: Outil inconnu '${name}'`;
     }
+}
+
+async function executeToolWithFormatter(name, args) {
+    console.log(theme.border(`  ┌─ [TOOL] ${name}`));
+    
+    const interactive = ['write_file', 'patch_file', 'run_command'].includes(name);
+    let interval;
+    if (!interactive) {
+        const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        let fIdx = 0;
+        process.stdout.write(theme.border(`  │  `) + theme.command(frames[fIdx]) + ` running...\r`);
+        interval = setInterval(() => {
+            fIdx = (fIdx + 1) % frames.length;
+            process.stdout.write(theme.border(`  │  `) + theme.command(frames[fIdx]) + ` running...\r`);
+        }, 80);
+    } else {
+        console.log(theme.border(`  │  `) + theme.info(`waiting for user confirmation...`));
+    }
+    
+    const startTime = Date.now();
+    const result = await handleToolExecution(name, args);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    
+    if (interval) {
+        clearInterval(interval);
+        process.stdout.write("                                                        \r");
+    }
+    
+    console.log(theme.border(`  └─ `) + theme.agent(`done in ${duration}s`));
+    return result;
 }
 
 // -----------------------------------------------------
@@ -734,7 +778,7 @@ async function runAgentTurn() {
         if (replyMessage.content) {
             lastAssistantResponse = replyMessage.content;
             addLog("INFO", "Réponse de l'assistant enregistrée.");
-            console.log(chalk.green(`\n🤖 Cypher : `));
+            console.log(theme.agent(`\n▸ Cypher :`));
             // Rendre le Markdown de l'IA avec formatage ANSI coloré
             console.log(marked(replyMessage.content));
         }
@@ -745,8 +789,7 @@ async function runAgentTurn() {
                 const name = tc.function.name;
                 const args = JSON.parse(tc.function.arguments);
                 
-                console.log(chalk.cyan(`⚙️ Exécution locale de l'outil [${name}]...`));
-                const result = await handleToolExecution(name, args);
+                const result = await executeToolWithFormatter(name, args);
                 
                 // Ajouter le résultat de l'outil à la conversation
                 chatMessages.push({
@@ -799,9 +842,9 @@ async function handleSlashCommand(text) {
     switch (commandName.toLowerCase()) {
         // --- 1. Contrôle de session
         case '/help':
-            console.log(chalk.cyan.bold("\n📚 CYPHER CODER CLI - COMMANDES DISPONIBLES :"));
+            console.log(theme.info("\nCYPHER CODER CLI - COMMANDES DISPONIBLES :"));
             
-            console.log(chalk.yellow("\n🎛️ Session :"));
+            console.log(theme.command("\nSession :"));
             console.log("  /help                     - Affiche ce menu d'aide");
             console.log("  /exit, /quit              - Quitte proprement l'agent");
             console.log("  /clear                    - Efface l'écran");
@@ -811,7 +854,7 @@ async function handleSlashCommand(text) {
             console.log("  /about                    - Infos sur le projet");
             console.log("  /status                   - Affiche le statut complet");
             
-            console.log(chalk.yellow("\n💬 Mémoire et Contexte :"));
+            console.log(theme.command("\nMémoire et Contexte :"));
             console.log("  /context                  - Affiche les fichiers chargés en contexte");
             console.log("  /context clear            - Efface le contexte de fichiers");
             console.log("  /context save <nom>       - Sauvegarde la session actuelle");
@@ -821,7 +864,7 @@ async function handleSlashCommand(text) {
             console.log("  /memory clear             - Efface les messages d'historique");
             console.log("  /tokens                   - Affiche les statistiques de tokens");
 
-            console.log(chalk.yellow("\n📜 Historique :"));
+            console.log(theme.command("\nHistorique :"));
             console.log("  /history                  - Affiche tout l'historique");
             console.log("  /history clear            - Efface l'historique enregistré");
             console.log("  /history save <fichier>   - Exporte l'historique dans un fichier");
@@ -831,7 +874,7 @@ async function handleSlashCommand(text) {
             console.log("  /redo                     - Relance la dernière requête");
             console.log("  /undo                     - Annule la dernière interaction");
 
-            console.log(chalk.yellow("\n🤖 Modèle et Configuration :"));
+            console.log(theme.command("\nModèle et Configuration :"));
             console.log("  /model                    - Affiche le modèle utilisé");
             console.log("  /model list               - Liste les modèles supportés");
             console.log("  /model set <nom>          - Change de modèle");
@@ -844,7 +887,7 @@ async function handleSlashCommand(text) {
             console.log("  /system reset             - Réinitialise le prompt système");
             console.log("  /stream <on|off>          - Active/désactive le streaming");
 
-            console.log(chalk.yellow("\n📁 Fichiers :"));
+            console.log(theme.command("\nFichiers :"));
             console.log("  /file load <chemin>       - Charge le fichier dans le contexte");
             console.log("  /file read <chemin>       - Lit et affiche un fichier");
             console.log("  /file write <chemin>      - Écrit la dernière réponse dans un fichier");
@@ -855,7 +898,7 @@ async function handleSlashCommand(text) {
             console.log("  /upload <chemin>          - Simule l'envoi d'un fichier");
             console.log("  /download <nom>           - Télécharge un fichier");
 
-            console.log(chalk.yellow("\n⚡ Code et Commandes :"));
+            console.log(theme.command("\nCode et Commandes :"));
             console.log("  /run                      - Exécute le dernier bloc de code");
             console.log("  /run <lang> <code>        - Exécute le code fourni");
             console.log("  /exec <commande>          - Lance une commande système");
@@ -866,7 +909,7 @@ async function handleSlashCommand(text) {
             console.log("  /output                   - Affiche la dernière sortie");
             console.log("  /output clear             - Efface la dernière sortie");
 
-            console.log(chalk.yellow("\n🔌 Outils et Recherche :"));
+            console.log(theme.command("\nOutils et Recherche :"));
             console.log("  /tools                    - Liste les outils activés");
             console.log("  /tool info <nom>          - Affiche la description d'un outil");
             console.log("  /tool enable/disable <n>  - Active/désactive un outil");
@@ -874,7 +917,7 @@ async function handleSlashCommand(text) {
             console.log("  /web search <requête>     - Recherche en ligne");
             console.log("  /web fetch <url>          - Récupère le contenu d'une URL");
 
-            console.log(chalk.yellow("\n🎨 Thème et Affichage :"));
+            console.log(theme.command("\nThème et Affichage :"));
             console.log("  /theme <dark|light>       - Change le thème");
             console.log("  /theme list               - Liste les thèmes");
             console.log("  /format <md|plain|json>   - Format des réponses");
@@ -884,7 +927,7 @@ async function handleSlashCommand(text) {
             console.log("  /color <on|off>           - Colorisation syntaxique");
             console.log("  /lang <fr|en>             - Change la langue");
 
-            console.log(chalk.yellow("\n🔐 Configuration et Variable d'env :"));
+            console.log(theme.command("\nConfiguration et Variable d'env :"));
             console.log("  /config                   - Affiche la configuration");
             console.log("  /config set <key> <val>   - Modifie la configuration");
             console.log("  /config reset             - Réinitialise la configuration");
@@ -892,7 +935,7 @@ async function handleSlashCommand(text) {
             console.log("  /env set <VAR> <val>      - Définit une variable d'env");
             console.log("  /api key show/set/clear   - Gère les clés d'API");
 
-            console.log(chalk.yellow("\n📊 Monitoring et Debug :"));
+            console.log(theme.command("\nMonitoring et Debug :"));
             console.log("  /debug <on|off>           - Active le mode debug");
             console.log("  /log                      - Affiche les logs");
             console.log("  /log clear/save           - Efface ou enregistre les logs");
@@ -902,7 +945,7 @@ async function handleSlashCommand(text) {
             console.log("  /trace                    - Trace des appels");
             console.log("  /inspect <var>            - Inspecte la configuration interne");
 
-            console.log(chalk.yellow("\n🔁 Automatisation :"));
+            console.log(theme.command("\nAutomatisation :"));
             console.log("  /macro save/run/list/del  - Gère les macros");
             console.log("  /pipe <cmd1> | <cmd2>     - Chaîne deux commandes");
             console.log("  /loop <n> <commande>      - Répète une commande");
@@ -1046,7 +1089,7 @@ async function handleSlashCommand(text) {
             if (!lastAssistantResponse) {
                 console.log(chalk.yellow("Aucune réponse précédente disponible."));
             } else {
-                console.log(chalk.green("\n🤖 Dernière réponse de Cypher :"));
+                console.log(theme.agent("\nDernière réponse de Cypher :"));
                 console.log(marked(lastAssistantResponse));
             }
             break;
@@ -1569,11 +1612,12 @@ async function executeLocalCode(lang, code) {
 }
 
 async function askQuestion() {
+    const username = os.userInfo().username || "local-user";
     const { userInput } = await inquirer.prompt([
         {
             type: 'input',
             name: 'userInput',
-            message: chalk.blue('❯ Vous :'),
+            message: theme.user(`❯ ${username} : `),
             prefix: ''
         }
     ]);
@@ -1583,6 +1627,9 @@ async function askQuestion() {
     if (!text) {
         return askQuestion();
     }
+
+    const time = new Date().toTimeString().split(' ')[0];
+    console.log(theme.border(`  └ [timestamp ${time}]`));
 
     if (text.startsWith('/')) {
         const handled = await handleSlashCommand(text);
@@ -1601,7 +1648,19 @@ async function askQuestion() {
 }
 
 async function main() {
+    const username = os.userInfo().username || "local-user";
+    const model = sessionConfig.model;
+    const sessionId = `sess_${Math.random().toString(36).substring(2, 10)}`;
+
     console.log(BANNER);
+    console.log(theme.agent("  CYPHER CODER CLI — L'IA experte en developpement local"));
+    console.log(theme.agent(`  Cree par DJAKOUA KWANKAM — Institut Universitaire de Technologie de Douala (IUT)`));
+    console.log(theme.border("  ─────────────────────────────────────────────────────────────────"));
+    console.log(theme.info(`  Connecte en tant que : @${username}`));
+    console.log(theme.info(`  Modele actif         : ${model}`));
+    console.log(theme.info(`  Session              : ${sessionId}`));
+    console.log(theme.border("  ─────────────────────────────────────────────────────────────────"));
+    console.log(theme.command("  Tape /help pour voir les commandes disponibles.\n"));
     
     // Initialiser la session de chat
     initChat();
@@ -1610,7 +1669,9 @@ async function main() {
     const args = process.argv.slice(2);
     if (args.length > 0) {
         const initialRequest = args.join(" ");
-        console.log(chalk.blue('❯ Vous : ') + initialRequest);
+        const time = new Date().toTimeString().split(' ')[0];
+        console.log(theme.user(`❯ ${username} : `) + initialRequest);
+        console.log(theme.border(`  └ [timestamp ${time}]`));
         if (initialRequest.startsWith('/')) {
             await handleSlashCommand(initialRequest);
         } else {
