@@ -1,3 +1,5 @@
+fastapi
+uvicorn
 gradio
 huggingface_hub
 duckduckgo-search

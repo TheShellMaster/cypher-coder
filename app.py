@@ -300,7 +300,6 @@ with gr.Blocks(theme=theme, css=css) as demo:
 
 app = gr.mount_gradio_app(app, demo, path="/gradio")
 
-if __name__ == "__main__":
-    import uvicorn
-    # Lancement d'Uvicorn pour s'assurer que le script bloque et tourne indéfiniment
-    uvicorn.run(app, host="0.0.0.0", port=7860)
+# Lancement d'Uvicorn au niveau racine pour s'assurer que le script tourne indéfiniment
+import uvicorn
+uvicorn.run(app, host="0.0.0.0", port=7860)
