@@ -3,12 +3,11 @@ title: Cypher Coder
 emoji: 💻
 colorFrom: indigo
 colorTo: purple
-sdk: gradio
-app_file: app.py
+sdk: docker
 pinned: false
 ---
 
-# Cypher Coder Space Backend
+# Cypher Coder Space Backend (Docker)
 
 Ce Space sert de backend pour l'agent de programmation **Cypher Coder CLI**.
 
