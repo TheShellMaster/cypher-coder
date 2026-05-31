@@ -1,7 +1,7 @@
 import os
 import gradio as gr
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from huggingface_hub import InferenceClient
 from duckduckgo_search import DDGS
 import json
@@ -14,68 +14,137 @@ app = FastAPI()
 # -----------------------------------------------------
 # Custom API Endpoint for the Cypher Coder CLI Client
 # -----------------------------------------------------
+def search_web(query):
+    try:
+        ddgs = DDGS()
+        results = list(ddgs.text(query, max_results=4))
+        if not results:
+            return "Aucun résultat trouvé sur le web."
+        formatted = []
+        for r in results:
+            formatted.append(f"Titre: {r['title']}\nRésumé: {r['body']}\nLien: {r['href']}")
+        return "\n\n".join(formatted)
+    except Exception as e:
+        return f"Erreur lors de la recherche: {str(e)}"
+
 @app.post("/api/chat")
 async def chat(request: Request):
     try:
         body = await request.json()
         messages = body.get("messages", [])
-        tools = body.get("tools", None)
-        stream = body.get("stream", False)
+        client_tools = body.get("tools", [])
         
-        if not stream:
+        # Associer les outils locaux du client et l'outil de recherche web du serveur
+        all_tools = list(client_tools)
+        search_tool_def = {
+            "type": "function",
+            "function": {
+                "name": "search_web",
+                "description": "Recherche des informations actualisées ou de la documentation technique sur internet.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "La requête de recherche."
+                        }
+                    },
+                    "required": ["query"]
+                }
+            }
+        }
+        all_tools.append(search_tool_def)
+        
+        # Boucle d'agent côté serveur pour exécuter search_web de manière transparente
+        while True:
             response = client.chat_completion(
                 messages=messages,
-                tools=tools,
+                tools=all_tools,
                 max_tokens=2048,
                 stream=False
             )
             choice = response.choices[0]
-            message_data = {
-                "role": choice.message.role,
-                "content": choice.message.content
-            }
-            if choice.message.tool_calls:
-                message_data["tool_calls"] = [
-                    {
-                        "id": tc.id,
-                        "type": tc.type,
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments
-                        }
-                    } for tc in choice.message.tool_calls
-                ]
-            return JSONResponse(content={"message": message_data})
-        else:
-            def event_generator():
-                try:
-                    stream_res = client.chat_completion(
-                        messages=messages,
-                        tools=tools,
-                        max_tokens=2048,
-                        stream=True
-                    )
-                    for chunk in stream_res:
-                        delta = chunk.choices[0].delta
-                        content = delta.content or ""
-                        tool_calls = []
-                        if delta.tool_calls:
-                            for tc in delta.tool_calls:
-                                tool_calls.append({
-                                    "index": tc.index,
-                                    "id": tc.id,
-                                    "type": tc.type,
-                                    "function": {
-                                        "name": tc.function.name,
-                                        "arguments": tc.function.arguments
-                                    }
-                                })
-                        
-                        yield f"data: {json.dumps({'content': content, 'tool_calls': tool_calls})}\n\n"
-                except Exception as e:
-                    yield f"data: {json.dumps({'error': str(e)})}\n\n"
-            return StreamingResponse(event_generator(), media_type="text/event-stream")
             
+            # Vérifier si l'IA veut appeler des outils
+            if choice.message.tool_calls:
+                has_search_call = False
+                for tc in choice.message.tool_calls:
+                    if tc.function.name == "search_web":
+                        has_search_call = True
+                        break
+                
+                if has_search_call:
+                    # Ajouter l'appel de l'outil du modèle à l'historique
+                    messages.append({
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "id": tc.id,
+                                "type": tc.type,
+                                "function": {
+                                    "name": tc.function.name,
+                                    "arguments": tc.function.arguments
+                                }
+                            } for tc in choice.message.tool_calls
+                        ]
+                    })
+                    
+                    # Exécuter les appels search_web et ajouter les résultats
+                    for tc in choice.message.tool_calls:
+                        if tc.function.name == "search_web":
+                            try:
+                                args = json.loads(tc.function.arguments)
+                                q = args.get("query", "")
+                                search_res = search_web(q)
+                                messages.append({
+                                    "role": "tool",
+                                    "name": "search_web",
+                                    "tool_call_id": tc.id,
+                                    "content": search_res
+                                })
+                            except Exception as parse_err:
+                                messages.append({
+                                    "role": "tool",
+                                    "name": "search_web",
+                                    "tool_call_id": tc.id,
+                                    "content": f"Erreur de décodage des arguments: {str(parse_err)}"
+                                })
+                        else:
+                            # Laisser les outils locaux vides pour ce tour
+                            messages.append({
+                                "role": "tool",
+                                "name": tc.function.name,
+                                "tool_call_id": tc.id,
+                                "content": "En attente d'exécution locale..."
+                            })
+                    
+                    # Relancer la génération avec le contexte de recherche mis à jour
+                    continue
+                else:
+                    # Contient uniquement des outils locaux pour le client
+                    message_data = {
+                        "role": choice.message.role,
+                        "content": choice.message.content,
+                        "tool_calls": [
+                            {
+                                "id": tc.id,
+                                "type": tc.type,
+                                "function": {
+                                    "name": tc.function.name,
+                                    "arguments": tc.function.arguments
+                                }
+                            } for tc in choice.message.tool_calls
+                        ]
+                    }
+                    return JSONResponse(content={"message": message_data})
+            else:
+                # Réponse textuelle finale sans outil
+                message_data = {
+                    "role": choice.message.role,
+                    "content": choice.message.content
+                }
+                return JSONResponse(content={"message": message_data})
+                
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
@@ -110,19 +179,6 @@ web_tools = [
         }
     }
 ]
-
-def search_web(query):
-    try:
-        ddgs = DDGS()
-        results = list(ddgs.text(query, max_results=4))
-        if not results:
-            return "Aucun résultat trouvé sur le web."
-        formatted = []
-        for r in results:
-            formatted.append(f"Titre: {r['title']}\nRésumé: {r['body']}\nLien: {r['href']}")
-        return "\n\n".join(formatted)
-    except Exception as e:
-        return f"Erreur lors de la recherche: {str(e)}"
 
 def respond(message, history):
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -238,5 +294,4 @@ with gr.Blocks(theme=theme, css=css) as demo:
         - 🌐 **Recherche Web** : Rechercher sur internet en temps réel pour obtenir la documentation de dernière minute.
         """)
 
-# Mount Gradio interface onto FastAPI app
 app = gr.mount_gradio_app(app, demo, path="/")
