@@ -12,7 +12,7 @@ hf_oauth: true
 
 **Cypher Coder** est un agent conversationnel en ligne de commande (CLI) autonome, capable de concevoir, lire, modifier du code localement et d'exécuter des commandes système directement dans votre terminal sous votre supervision.
 
-Ce projet a été conçu et développé par **DJAKOUA KWANKAM**, étudiant en informatique à l'**Institut Universitaire de Douala (IUD)**.
+Ce projet a été conçu et développé par **DJAKOUA KWANKAM**, étudiant en informatique à l'**Institut Universitaire de Technologie de Douala (IUT)**.
 
 ---
 

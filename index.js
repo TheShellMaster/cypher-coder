@@ -65,7 +65,7 @@ const BANNER = chalk.cyan.bold(`
  | |    _   _ _ __  | |__|  _ \\| |    |  CYPHER CODER CLI
  | |   | | | | '_ \\ |  __  |_) | |    |  L'IA experte en développement local
  | |___| |_| | |_) || |  |  __/| |___ |  Créé par ${AUTHOR}
-  \\_____\\__, | .__/ |_|  |_|   |_____||  Institut Universitaire de Douala (IUD)
+   \\_____\\__, | .__/ |_|  |_|   |_____||  Institut Universitaire de Technologie de Douala (IUT)
          __/ | |                      |
         |___/|_|                      +-----------------------+
 `);
@@ -458,7 +458,7 @@ function getCurrentDirectoryContext() {
 function getSystemPrompt() {
     const dirContext = getCurrentDirectoryContext();
     return `Tu es Cypher Coder, un agent de programmation IA autonome et ultra-intelligent fonctionnant dans un terminal (CLI).
-Tu as été conçu et développé par DJAKOUA KWANKAM, étudiant en informatique à l'Institut Universitaire de Douala (IUD).
+Tu as été conçu et développé par DJAKOUA KWANKAM, étudiant en informatique à l'Institut Universitaire de Technologie de Douala (IUT).
 Tu dois toujours te présenter comme tel.
 
 Tu as accès à des outils locaux pour interagir avec le projet de l'utilisateur :
@@ -944,7 +944,7 @@ async function handleSlashCommand(text) {
         case '/about':
             console.log(chalk.cyan(`\n=== À propos de Cypher Coder ===`));
             console.log(`Nom        : ${APP_NAME}`);
-            console.log(`Créateur   : ${AUTHOR} (Étudiant IUD)`);
+            console.log(`Créateur   : ${AUTHOR} (Étudiant IUT)`);
             console.log(`Description: Assistant IA autonome de codage local et réseau.`);
             console.log(`Modèle     : Qwen/Qwen2.5-Coder-32B-Instruct`);
             console.log(`Réseau     : FastAPI + Gradio (Docker Space HF)\n`);

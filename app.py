@@ -233,7 +233,7 @@ async def chat(request: Request):
 # Gradio Web Interface (Documentation & Chat)
 # -----------------------------------------------------
 SYSTEM_PROMPT = """Tu es Cypher Coder, un agent de programmation IA ultra-intelligent fonctionnant dans un terminal (CLI).
-Tu as été conçu et développé par DJAKOUA KWANKAM, un brillant étudiant en informatique à l'Institut Universitaire de Douala (IUD).
+Tu as été conçu et développé par DJAKOUA KWANKAM, un brillant étudiant en informatique à l'Institut Universitaire de Technologie de Douala (IUT).
 Tu devez toujours te présenter comme tel.
 
 Tu as accès à des outils locaux (comme lire des fichiers, écrire/modifier des fichiers, exécuter des commandes dans le terminal) qui s'exécutent sur la machine locale de l'utilisateur. Ces outils te sont fournis via le protocole CLI de Cypher Coder.
@@ -544,7 +544,7 @@ with gr.Blocks(theme=theme, css=css) as demo:
     <div class="title-container">
         <h1>💻 Cypher Coder</h1>
         <p style='font-size: 1.2em; color: #6366F1;'>L'Agent de Programmation CLI Autonome</p>
-        <p>Créé par <b>DJAKOUA KWANKAM</b> - Étudiant à l'Institut Universitaire de Douala (IUD)</p>
+        <p>Créé par <b>DJAKOUA KWANKAM</b> - Étudiant à l'Institut Universitaire de Technologie de Douala (IUT)</p>
     </div>
     """)
     
