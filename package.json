@@ -1,0 +1,32 @@
+{
+  "name": "cypher-coder",
+  "version": "1.0.0",
+  "description": "Cypher Coder - L'Agent IA expert en programmation créé par DJAKOUA KWANKAM",
+  "main": "index.js",
+  "bin": {
+    "cypher": "./index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "ai",
+    "cli",
+    "agent",
+    "cypher",
+    "coding",
+    "assistant"
+  ],
+  "author": "DJAKOUA KWANKAM",
+  "license": "MIT",
+  "dependencies": {
+    "@gradio/client": "^2.2.1",
+    "@huggingface/inference": "^2.6.4",
+    "chalk": "^5.3.0",
+    "inquirer": "^9.2.12",
+    "marked": "^15.0.12",
+    "marked-terminal": "^7.3.0",
+    "ora": "^7.0.1"
+  }
+}

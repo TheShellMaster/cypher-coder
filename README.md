@@ -1,12 +1,3 @@
----
-title: Cypher Coder
-emoji: 💻
-colorFrom: indigo
-colorTo: purple
-sdk: docker
-pinned: false
----
-
 # 💻 Cypher Coder - Agent IA de Programmation CLI
 
 **Cypher Coder** est un agent conversationnel en ligne de commande (CLI) autonome, capable de concevoir, lire, modifier du code localement et d'exécuter des commandes système directement dans votre terminal sous votre supervision.
