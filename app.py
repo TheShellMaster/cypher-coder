@@ -1,5 +1,7 @@
 import os
 import gradio as gr
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from huggingface_hub import InferenceClient
 from duckduckgo_search import DDGS
 import json
@@ -7,16 +9,89 @@ import json
 token = os.environ.get("HF_TOKEN")
 client = InferenceClient("Qwen/Qwen2.5-Coder-32B-Instruct", token=token)
 
+app = FastAPI()
+
+# -----------------------------------------------------
+# Custom API Endpoint for the Cypher Coder CLI Client
+# -----------------------------------------------------
+@app.post("/api/chat")
+async def chat(request: Request):
+    try:
+        body = await request.json()
+        messages = body.get("messages", [])
+        tools = body.get("tools", None)
+        stream = body.get("stream", False)
+        
+        if not stream:
+            response = client.chat_completion(
+                messages=messages,
+                tools=tools,
+                max_tokens=2048,
+                stream=False
+            )
+            choice = response.choices[0]
+            message_data = {
+                "role": choice.message.role,
+                "content": choice.message.content
+            }
+            if choice.message.tool_calls:
+                message_data["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": tc.type,
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments
+                        }
+                    } for tc in choice.message.tool_calls
+                ]
+            return JSONResponse(content={"message": message_data})
+        else:
+            def event_generator():
+                try:
+                    stream_res = client.chat_completion(
+                        messages=messages,
+                        tools=tools,
+                        max_tokens=2048,
+                        stream=True
+                    )
+                    for chunk in stream_res:
+                        delta = chunk.choices[0].delta
+                        content = delta.content or ""
+                        tool_calls = []
+                        if delta.tool_calls:
+                            for tc in delta.tool_calls:
+                                tool_calls.append({
+                                    "index": tc.index,
+                                    "id": tc.id,
+                                    "type": tc.type,
+                                    "function": {
+                                        "name": tc.function.name,
+                                        "arguments": tc.function.arguments
+                                    }
+                                })
+                        
+                        yield f"data: {json.dumps({'content': content, 'tool_calls': tool_calls})}\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            return StreamingResponse(event_generator(), media_type="text/event-stream")
+            
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+# -----------------------------------------------------
+# Gradio Web Interface (Documentation & Chat)
+# -----------------------------------------------------
 SYSTEM_PROMPT = """Tu es Cypher Coder, un agent de programmation IA ultra-intelligent fonctionnant dans un terminal (CLI).
 Tu as été conçu et développé par DJAKOUA KWANKAM, un brillant étudiant en informatique à l'Institut Universitaire de Douala (IUD).
-Tu dois toujours te présenter comme tel.
+Tu devez toujours te présenter comme tel.
 
 Tu as accès à des outils locaux (comme lire des fichiers, écrire/modifier des fichiers, exécuter des commandes dans le terminal) qui s'exécutent sur la machine locale de l'utilisateur. Ces outils te sont fournis via le protocole CLI de Cypher Coder.
 Pour les informations en temps réel ou la documentation externe, tu peux aussi utiliser la recherche web.
 Sois toujours concis, professionnel et direct dans tes explications de code.
 """
 
-tools = [
+web_tools = [
     {
         "type": "function",
         "function": {
@@ -63,7 +138,7 @@ def respond(message, history):
         response = client.chat_completion(
             messages,
             max_tokens=2048,
-            tools=tools,
+            tools=web_tools,
             stream=False
         )
         first_response = response.choices[0].message
@@ -98,7 +173,6 @@ def respond(message, history):
     except Exception as e:
         yield f"Erreur lors de la génération: {str(e)}"
 
-# Interface Web Gradio avec documentation et présentation esthétique
 theme = gr.themes.Soft(
     primary_hue="indigo",
     secondary_hue="cyan",
@@ -108,7 +182,6 @@ theme = gr.themes.Soft(
 css = """
 footer {visibility: hidden}
 .title-container { text-align: center; margin-bottom: 20px; }
-.pixel-art { font-family: monospace; font-size: 8px; line-height: 8px; text-align: center; color: #4F46E5; }
 """
 
 with gr.Blocks(theme=theme, css=css) as demo:
@@ -165,5 +238,5 @@ with gr.Blocks(theme=theme, css=css) as demo:
         - 🌐 **Recherche Web** : Rechercher sur internet en temps réel pour obtenir la documentation de dernière minute.
         """)
 
-if __name__ == "__main__":
-    demo.launch()
+# Mount Gradio interface onto FastAPI app
+app = gr.mount_gradio_app(app, demo, path="/")
