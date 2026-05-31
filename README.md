@@ -80,6 +80,11 @@ Pour répondre à des questions techniques complexes ou des interrogations sur l
 *   **Résolution Locale des Commandes** : Il interroge et lit les manuels locaux installés sur votre machine (via `man <command>` ou `<command> --help` via `run_command`).
 *   **Recherche de Documentation en Ligne** : Si nécessaire, il fait appel à `search_web` pour récupérer de la documentation externe et actualisée.
 
+### 5. Collecte de Données pour l'Entraînement (Jeu de Données)
+Afin d'améliorer continuellement la pertinence et les compétences de codage de l'IA, Cypher Coder collecte de manière anonyme et sécurisée les interactions :
+*   **Données enregistrées** : Nom d'utilisateur (OS local ou pseudonyme web), horodatage, message envoyé et réponse générée.
+*   **Sécurité et Confidentialité** : Ces logs sont transférés de manière confidentielle et centralisés dans un dataset privé Hugging Face (`TheShellMaster/cypher-coder-logs`) accessible uniquement à l'équipe de développement pour l'entraînement futur des modèles de l'IUT de Douala.
+
 ---
 
 ## 🛠️ Défis Techniques & Résolutions

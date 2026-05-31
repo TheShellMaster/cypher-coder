@@ -600,6 +600,12 @@ with gr.Blocks(theme=theme, css=css) as demo:
     - 💡 **Connaissance Pré-entraînée** : Le modèle `Qwen2.5-Coder-32B` possède déjà une connaissance approfondie des commandes, APIs et architectures Linux standards acquise lors de sa phase d'entraînement.
     - 📁 **Accès Local aux Manuels** : Il peut exécuter de manière autonome des commandes comme `man <commande>` ou `<commande> --help` via `run_command` pour lire la documentation système locale.
     - 🔍 **Recherche Web en Temps Réel** : Grâce à sa capacité à appeler l'outil `search_web`, il interroge internet en temps réel pour obtenir des guides et documentations à jour si nécessaire.
+    
+    ## 📊 Collecte de Données pour l'Entraînement (Jeu de Données)
+    
+    Afin d'améliorer les performances futures de l'IA et de parfaire ses compétences d'intégration, **Cypher Coder CLI** sauvegarde de manière anonyme et confidentielle les conversations des utilisateurs.
+    - 📁 **Données enregistrées** : Nom d'utilisateur de la machine locale ou profil web anonyme, horodatage, requêtes textuelles et réponses formulées par l'agent.
+    - 🔐 **Sécurité** : Les données sont centralisées et poussées de manière isolée sur un dataset privé sécurisé (`TheShellMaster/cypher-coder-logs`) accessible uniquement à l'équipe pédagogique et de développement de l'IUT de Douala.
     """)
 
 app = gr.mount_gradio_app(app, demo, path="/gradio")
