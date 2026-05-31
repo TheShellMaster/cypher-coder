@@ -599,6 +599,13 @@ with gr.Blocks(theme=theme, css=css) as demo:
     - 🖥️ **run_command** : Exécute des tests, lance des compilations ou configure git.
     
     *Toutes les actions d'écriture de fichier ou d'exécution de commande shell requièrent votre validation explicite (Y/n) avant d'être appliquées.*
+    
+    ## 🧠 Gestion des Connaissances & Accès à la Documentation
+    
+    Pour répondre à vos questions techniques ou de configuration système, **Cypher Coder** n'embarque pas l'intégralité de la documentation Linux en mémoire constante. Il fonctionne de manière dynamique :
+    - 💡 **Connaissance Pré-entraînée** : Le modèle `Qwen2.5-Coder-32B` possède déjà une connaissance approfondie des commandes, APIs et architectures Linux standards acquise lors de sa phase d'entraînement.
+    - 📁 **Accès Local aux Manuels** : Il peut exécuter de manière autonome des commandes comme `man <commande>` ou `<commande> --help` via `run_command` pour lire la documentation système locale.
+    - 🔍 **Recherche Web en Temps Réel** : Grâce à sa capacité à appeler l'outil `search_web`, il interroge internet en temps réel pour obtenir des guides et documentations à jour si nécessaire.
     """)
 
 app = gr.mount_gradio_app(app, demo, path="/gradio")

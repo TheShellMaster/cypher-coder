@@ -74,6 +74,12 @@ Un conteneur Docker exécutant une application **FastAPI** avec un redirect vers
 *   Lorsque le modèle demande une recherche sur internet (`search_web`), celle-ci est résolue directement par le serveur dans le cloud via DuckDuckGo.
 *   Lorsque le modèle demande une action système locale (lire un fichier, exécuter une commande), le serveur renvoie l'instruction au client CLI local qui l'exécute après avoir demandé le consentement explicite de l'utilisateur.
 
+### 4. Gestion des Connaissances & Accès aux Manuels Linux
+Pour répondre à des questions techniques complexes ou des interrogations sur le système, Cypher Coder n'embarque pas la documentation complète en mémoire constante, mais utilise les mécanismes suivants :
+*   **Connaissance Pré-entraînée** : Le modèle de base `Qwen2.5-Coder-32B` connaît déjà par défaut les commandes standards, les APIs et l'architecture générale Linux suite à son apprentissage.
+*   **Résolution Locale des Commandes** : Il interroge et lit les manuels locaux installés sur votre machine (via `man <command>` ou `<command> --help` via `run_command`).
+*   **Recherche de Documentation en Ligne** : Si nécessaire, il fait appel à `search_web` pour récupérer de la documentation externe et actualisée.
+
 ---
 
 ## 🛠️ Défis Techniques & Résolutions
