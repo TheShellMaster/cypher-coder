@@ -1,7 +1,7 @@
 import os
 import gradio as gr
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from huggingface_hub import InferenceClient
 from duckduckgo_search import DDGS
 import json
@@ -26,6 +26,10 @@ def search_web(query):
         return "\n\n".join(formatted)
     except Exception as e:
         return f"Erreur lors de la recherche: {str(e)}"
+
+@app.get("/")
+async def root():
+    return RedirectResponse(url="/gradio")
 
 @app.post("/api/chat")
 async def chat(request: Request):
@@ -294,4 +298,4 @@ with gr.Blocks(theme=theme, css=css) as demo:
         - 🌐 **Recherche Web** : Rechercher sur internet en temps réel pour obtenir la documentation de dernière minute.
         """)
 
-app = gr.mount_gradio_app(app, demo, path="/")
+app = gr.mount_gradio_app(app, demo, path="/gradio")
