@@ -1604,13 +1604,19 @@ async function main() {
     // Initialiser la session de chat
     initChat();
     
-    // Support des arguments directs (ex: cypher "Bonjour")
+    // Support des arguments directs (ex: cypher "Bonjour" ou cypher "/help")
     const args = process.argv.slice(2);
     if (args.length > 0) {
         const initialRequest = args.join(" ");
         console.log(chalk.blue('❯ Vous : ') + initialRequest);
-        chatMessages.push({"role": "user", "content": initialRequest});
-        await runAgentTurn();
+        if (initialRequest.startsWith('/')) {
+            await handleSlashCommand(initialRequest);
+        } else {
+            lastUserInput = initialRequest;
+            commandHistory.push(initialRequest);
+            chatMessages.push({"role": "user", "content": initialRequest});
+            await runAgentTurn();
+        }
     }
     
     askQuestion();

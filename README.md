@@ -5,6 +5,7 @@ colorFrom: indigo
 colorTo: purple
 sdk: docker
 pinned: false
+hf_oauth: true
 ---
 
 # 💻 Cypher Coder - Agent IA de Programmation CLI
