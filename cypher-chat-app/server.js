@@ -62,7 +62,7 @@ function searchWeb(query) {
             }
         };
         
-        https.get(url, options, (res) => {
+        const req = https.get(url, options, (res) => {
             let html = "";
             res.on("data", (chunk) => { html += chunk; });
             res.on("end", () => {
@@ -71,7 +71,7 @@ function searchWeb(query) {
                 const resultRegex = /<div class="[^"]*web-result[^"]*">([\s\S]*?)<div class="clear"><\/div>/g;
                 let match;
                 
-                while ((match = resultRegex.exec(html)) !== null && results.length < 3) {
+                while ((match = resultRegex.exec(html)) !== null && results.length < 10) {
                     const body = match[1];
                     
                     // Extract Title & URL
@@ -100,8 +100,16 @@ function searchWeb(query) {
                 }
                 resolve(results);
             });
-        }).on("error", (e) => {
+        });
+        
+        req.on("error", (e) => {
             console.error("❌ Erreur HTTPS DuckDuckGo :", e);
+            resolve([]);
+        });
+        
+        req.setTimeout(5000, () => {
+            console.error("⚠️ Timeout de 5 secondes atteint pour la recherche DuckDuckGo. Abandon.");
+            req.destroy();
             resolve([]);
         });
     });
@@ -194,6 +202,12 @@ app.post("/api/chat", async (req, res) => {
             shouldSearch = true;
         }
 
+        // Avoid triggering RAG search for simple greetings or short phrases to act thoughtfully
+        const simpleGreetings = /^(bonjour|salut|hello|hi|hey|coucou|yo|bonsoir|test|testing|merci|thanks|thank you|ça va\s*\??|ca va\s*\??|comment ça va\s*\??|how are you\s*\??|qui es-tu\s*\??|tu es qui\s*\??)(\s*!*)?$/i;
+        if (shouldSearch && (msgLower.trim().length < 3 || simpleGreetings.test(msgLower.trim()))) {
+            shouldSearch = false;
+        }
+
         if (shouldSearch) {
             sendLog("🔍 Initialisation de la recherche en ligne...", "start");
             
@@ -210,7 +224,11 @@ app.post("/api/chat", async (req, res) => {
                 searchQuery = lastMessage;
             }
             
-            sendLog(`🔎 Recherche de : "${searchQuery}"...`, "searching");
+            let displayQuery = searchQuery;
+            if (displayQuery.length > 50) {
+                displayQuery = displayQuery.substring(0, 50) + "...";
+            }
+            sendLog(`🔎 Recherche de : "${displayQuery}"...`, "searching");
             
             const searchResults = await searchWeb(searchQuery);
             if (searchResults.length > 0) {

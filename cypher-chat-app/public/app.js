@@ -325,17 +325,6 @@ function renderMessage(role, content) {
             <button class="action-btn share-btn" title="Partager la discussion">
                 <i data-lucide="share-2" size="14"></i>
             </button>
-            <div class="export-dropdown-wrapper">
-                <button class="action-btn export-trigger-btn" title="Exporter / Télécharger">
-                    <i data-lucide="download" size="14"></i>
-                </button>
-                <div class="export-dropdown-content">
-                    <button class="export-option-btn pdf-opt"><i data-lucide="file-text" size="12"></i> PDF stylisé</button>
-                    <button class="export-option-btn docx-opt"><i data-lucide="file" size="12"></i> Word (DOCX)</button>
-                    <button class="export-option-btn pptx-opt"><i data-lucide="presentation" size="12"></i> Présentation (PPTX)</button>
-                    <button class="export-option-btn zip-opt"><i data-lucide="archive" size="12"></i> Code en ZIP</button>
-                </div>
-            </div>
         `;
         
         // Copy action
@@ -376,20 +365,6 @@ function renderMessage(role, content) {
             navigator.clipboard.writeText(shareText).then(() => {
                 showToast("Discussion copiée dans le presse-papiers !", "success");
             });
-        });
-        
-        // Export Options
-        actionsRow.querySelector(".pdf-opt").addEventListener("click", () => {
-            exportMessageToPDF(bubble, content);
-        });
-        actionsRow.querySelector(".docx-opt").addEventListener("click", () => {
-            exportMessageToDOCX(bubble, content);
-        });
-        actionsRow.querySelector(".pptx-opt").addEventListener("click", () => {
-            exportMessageToPPTX(bubble, content);
-        });
-        actionsRow.querySelector(".zip-opt").addEventListener("click", () => {
-            exportMessageToZIP(bubble, content);
         });
         
     } else { // user
@@ -479,7 +454,11 @@ function renderMessage(role, content) {
     messagesContainer.appendChild(wrapper);
     
     lucide.createIcons({ scope: actionsRow });
-    addCopyCodeButtons(bubble);
+    if (role === "assistant") {
+        injectFileHeaders(bubble);
+    } else {
+        addCopyCodeButtons(bubble);
+    }
     return bubble;
 }
 
@@ -526,6 +505,121 @@ function addCopyCodeButtons(bubbleElement) {
         });
         
         pre.appendChild(copyBtn);
+    });
+}
+
+// Inject beautiful premium file headers and download buttons for code blocks
+function injectFileHeaders(bubbleElement) {
+    const preBlocks = bubbleElement.querySelectorAll("pre");
+    preBlocks.forEach((pre, index) => {
+        // Prevent duplicate injection
+        if (pre.parentElement.classList.contains("code-block-wrapper")) {
+            return;
+        }
+        
+        const codeElement = pre.querySelector("code");
+        if (!codeElement) return;
+        const codeText = codeElement.innerText;
+        
+        // Extract filename from the first line
+        const lines = codeText.split("\n");
+        const firstLine = lines[0] ? lines[0].trim() : "";
+        
+        let filename = "";
+        const commentRegex = /^(?:\/\/\s*|\/\*\s*|#\s*|<!--\s*)([a-zA-Z0-9_\-\.\/]+)(?:\s*\*\/|\s*-->)?$/;
+        const match = firstLine.match(commentRegex);
+        
+        let determinedLanguage = "txt";
+        const classes = Array.from(codeElement.classList);
+        const langClass = classes.find(c => c.startsWith("language-"));
+        if (langClass) {
+            determinedLanguage = langClass.replace("language-", "");
+        }
+        
+        if (match && match[1]) {
+            filename = match[1];
+        } else {
+            // Fallback default filenames
+            if (determinedLanguage === "javascript" || determinedLanguage === "js") filename = `script.js`;
+            else if (determinedLanguage === "html") filename = `index.html`;
+            else if (determinedLanguage === "css") filename = `style.css`;
+            else if (determinedLanguage === "python" || determinedLanguage === "py") filename = `script.py`;
+            else if (determinedLanguage === "json") filename = `data.json`;
+            else if (determinedLanguage === "markdown" || determinedLanguage === "md") filename = `document.md`;
+            else if (determinedLanguage === "shell" || determinedLanguage === "bash" || determinedLanguage === "sh") filename = `script.sh`;
+            else filename = `code_${index + 1}.txt`;
+        }
+        
+        // Determine file icon based on extension
+        let iconName = "file-code";
+        const ext = filename.split(".").pop().toLowerCase();
+        if (["py", "pyw"].includes(ext)) iconName = "terminal";
+        else if (["js", "ts", "jsx", "tsx"].includes(ext)) iconName = "file-json";
+        else if (["html", "xml"].includes(ext)) iconName = "file-type-2";
+        else if ("css" === ext) iconName = "file-spreadsheet";
+        else if ("json" === ext) iconName = "file-json";
+        else if ("md" === ext) iconName = "file-text";
+        
+        // Create wrapper
+        const wrapper = document.createElement("div");
+        wrapper.className = "code-block-wrapper";
+        
+        // Create Header
+        const header = document.createElement("div");
+        header.className = "code-block-header";
+        header.innerHTML = `
+            <div class="code-block-filename">
+                <i data-lucide="${iconName}"></i>
+                <span>${filename}</span>
+            </div>
+            <div class="code-block-actions">
+                <button class="code-action-btn copy-btn" title="Copier le code">
+                    <i data-lucide="copy" size="13"></i> Copier
+                </button>
+                <button class="code-action-btn download-btn" title="Télécharger le fichier">
+                    <i data-lucide="download" size="13"></i> Télécharger
+                </button>
+            </div>
+        `;
+        
+        // Insert wrapper around the pre block
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(header);
+        wrapper.appendChild(pre);
+        
+        // Remove old copy button if marked added it
+        const oldCopyBtn = pre.querySelector(".copy-code-btn");
+        if (oldCopyBtn) oldCopyBtn.remove();
+        
+        // Setup copy and download handlers
+        const copyBtn = header.querySelector(".copy-btn");
+        const downloadBtn = header.querySelector(".download-btn");
+        
+        copyBtn.addEventListener("click", () => {
+            navigator.clipboard.writeText(codeText).then(() => {
+                copyBtn.innerHTML = `<i data-lucide="check" size="13"></i> Copié !`;
+                lucide.createIcons({ scope: copyBtn });
+                setTimeout(() => {
+                    copyBtn.innerHTML = `<i data-lucide="copy" size="13"></i> Copier`;
+                    lucide.createIcons({ scope: copyBtn });
+                }, 2000);
+            });
+        });
+        
+        downloadBtn.addEventListener("click", () => {
+            const blob = new Blob([codeText], { type: "text/plain;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast(`Fichier "${filename}" téléchargé !`, "success");
+        });
+        
+        lucide.createIcons({ scope: header });
     });
 }
 
@@ -730,7 +824,7 @@ async function streamAIResponse() {
                                 }
                             } else if (parsed.status === "thinking") {
                                 searchLogsBox.classList.add("completed");
-                                searchLogsBox.classList.add("collapsed");
+                                // We keep the box open, only the logs list will collapse via CSS
                                 searchLogsBox.querySelector(".search-logs-title").innerText = "Recherche terminée";
                                 const globeIcon = searchLogsBox.querySelector(".search-globe-icon");
                                 if (globeIcon) {
@@ -767,10 +861,9 @@ async function streamAIResponse() {
                                 firstToken = false;
                                 botBubble.innerHTML = ""; // Clear loader dots
                                 
-                                // Auto-collapse search panel when response streaming begins
+                                // Mark search panel as completed when response streaming begins (keep expanded)
                                 if (searchLogsBox) {
                                     searchLogsBox.classList.add("completed");
-                                    searchLogsBox.classList.add("collapsed");
                                     searchLogsBox.querySelector(".search-logs-title").innerText = "Recherche terminée";
                                     const globeIcon = searchLogsBox.querySelector(".search-globe-icon");
                                     if (globeIcon && !globeIcon.classList.contains("check-icon")) {
@@ -794,6 +887,7 @@ async function streamAIResponse() {
         
         // Save chatbot response to messages state
         currentMessages.push({ role: "assistant", content: botResponseText });
+        injectFileHeaders(botBubble);
         saveCurrentConversation();
         
     } catch (e) {
@@ -922,346 +1016,4 @@ function showToast(message, type = "info") {
     }, 4000);
 }
 
-// -----------------------------------------------------
-// MULTI-FORMAT EXPORTERS (ZIP, PDF, DOCX, PPTX)
-// -----------------------------------------------------
 
-// 1. ZIP Exporter (combines all code blocks into a ZIP archive)
-function exportMessageToZIP(bubbleElement, rawContent) {
-    const preBlocks = bubbleElement.querySelectorAll("pre");
-    if (preBlocks.length === 0) {
-        showToast("Aucun bloc de code trouvé dans ce message.", "warning");
-        return;
-    }
-    
-    if (typeof JSZip === "undefined") {
-        showToast("Le module ZIP n'est pas encore disponible.", "error");
-        return;
-    }
-    
-    const zip = new JSZip();
-    let fileCount = 0;
-    
-    preBlocks.forEach((pre, index) => {
-        const codeElement = pre.querySelector("code");
-        if (!codeElement) return;
-        const codeText = codeElement.innerText;
-        
-        // Extract filename from comment in first line
-        const lines = codeText.split("\n");
-        const firstLine = lines[0] ? lines[0].trim() : "";
-        
-        let filename = "";
-        const commentRegex = /^(?:\/\/\s*|\/\*\s*|#\s*|<!--\s*)([a-zA-Z0-9_\-\.\/]+)(?:\s*\*\/|\s*-->)?$/;
-        const match = firstLine.match(commentRegex);
-        
-        if (match && match[1]) {
-            filename = match[1];
-        } else {
-            // Fallback to language class or index
-            let ext = "txt";
-            const classes = Array.from(codeElement.classList);
-            const langClass = classes.find(c => c.startsWith("language-"));
-            if (langClass) {
-                const lang = langClass.replace("language-", "");
-                if (lang === "javascript" || lang === "js") ext = "js";
-                else if (lang === "html") ext = "html";
-                else if (lang === "css") ext = "css";
-                else if (lang === "python" || lang === "py") ext = "py";
-                else if (lang === "json") ext = "json";
-                else if (lang === "markdown" || lang === "md") ext = "md";
-                else if (lang === "shell" || lang === "bash" || lang === "sh") ext = "sh";
-            }
-            filename = `fichier_${index + 1}.${ext}`;
-        }
-        
-        zip.file(filename, codeText);
-        fileCount++;
-    });
-    
-    if (fileCount === 0) {
-        showToast("Aucun fichier de code valide n'a pu être extrait.", "warning");
-        return;
-    }
-    
-    showToast(`Génération du ZIP (${fileCount} fichiers)...`, "info");
-    
-    zip.generateAsync({ type: "blob" }).then(content => {
-        const url = URL.createObjectURL(content);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `cypher_projet_${Date.now()}.zip`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        showToast("Fichier ZIP téléchargé avec succès !", "success");
-    }).catch(err => {
-        showToast(`Erreur lors de l'export ZIP: ${err.message}`, "error");
-    });
-}
-
-// 2. PDF Exporter (renders a beautiful, light-themed printable PDF report)
-function exportMessageToPDF(bubbleElement, rawContent) {
-    if (typeof html2pdf === "undefined") {
-        showToast("Le module PDF n'est pas encore disponible.", "error");
-        return;
-    }
-    
-    showToast("Génération du document PDF...", "info");
-    
-    // Create a temporary container styled as a premium report page
-    const tempContainer = document.createElement("div");
-    tempContainer.style.padding = "40px 50px";
-    tempContainer.style.background = "#FFFFFF";
-    tempContainer.style.color = "#1E293B";
-    tempContainer.style.fontFamily = "'Outfit', sans-serif";
-    tempContainer.style.fontSize = "14px";
-    tempContainer.style.lineHeight = "1.6";
-    tempContainer.style.position = "absolute";
-    tempContainer.style.left = "-9999px";
-    
-    // Custom document header
-    tempContainer.innerHTML = `
-        <div style="border-bottom: 2px solid #E2E8F0; padding-bottom: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #0F172A; letter-spacing: 0.5px;">CYPHER AI — DOCUMENT DE TRAVAIL</h1>
-                <p style="margin: 5px 0 0; font-size: 11px; color: #64748B; font-weight: 600; text-transform: uppercase;">Assistant technique d'élite</p>
-            </div>
-            <div style="text-align: right;">
-                <p style="margin: 0; font-size: 12px; font-weight: 700; color: #0F172A;">DJAKOUA KWANKAM</p>
-                <p style="margin: 3px 0 0; font-size: 10px; color: #64748B;">IUT de Douala</p>
-            </div>
-        </div>
-        <div style="margin-bottom: 30px;">
-            ${bubbleElement.innerHTML}
-        </div>
-        <div style="border-top: 1px solid #E2E8F0; padding-top: 10px; margin-top: 30px; text-align: center; font-size: 10px; color: #94A3B8;">
-            Généré automatiquement par Cypher AI Chat. Le document d'origine est daté de 2026.
-        </div>
-    `;
-    
-    // Format all code blocks inside temp container for professional PDF printing
-    const preBlocks = tempContainer.querySelectorAll("pre");
-    preBlocks.forEach(pre => {
-        pre.style.background = "#F8FAFC";
-        pre.style.border = "1px solid #E2E8F0";
-        pre.style.borderRadius = "8px";
-        pre.style.padding = "14px";
-        pre.style.margin = "16px 0";
-        pre.style.position = "relative";
-        pre.style.color = "#0F172A";
-        
-        // Remove copy button from PDF print
-        const btn = pre.querySelector(".copy-code-btn");
-        if (btn) btn.remove();
-    });
-    
-    const inlineCodes = tempContainer.querySelectorAll("code:not(pre code)");
-    inlineCodes.forEach(code => {
-        code.style.background = "#F1F5F9";
-        code.style.border = "1px solid #E2E8F0";
-        code.style.color = "#0F172A";
-        code.style.padding = "2px 5px";
-        code.style.borderRadius = "4px";
-        code.style.fontSize = "12px";
-    });
-    
-    document.body.appendChild(tempContainer);
-    
-    const opt = {
-        margin:       15,
-        filename:     `cypher_rapport_${Date.now()}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-    
-    html2pdf().set(opt).from(tempContainer).save().then(() => {
-        document.body.removeChild(tempContainer);
-        showToast("Rapport PDF généré et téléchargé !", "success");
-    }).catch(err => {
-        if (tempContainer.parentNode) document.body.removeChild(tempContainer);
-        showToast(`Erreur d'export PDF: ${err.message}`, "error");
-    });
-}
-
-// 3. DOCX Exporter (saves formatted content as a Microsoft Word document)
-function exportMessageToDOCX(bubbleElement, rawContent) {
-    showToast("Génération du fichier Word (DOCX)...", "info");
-    
-    // Style Word document
-    const htmlHeader = `
-    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-    <head>
-        <meta charset="utf-8">
-        <title>Rapport Cypher AI</title>
-        <style>
-            body { font-family: 'Segoe UI', Arial, sans-serif; color: #333333; line-height: 1.5; font-size: 11pt; padding: 20px; }
-            h1 { color: #111b33; font-size: 18pt; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 20pt; }
-            h2 { color: #1B2035; font-size: 14pt; margin-top: 15pt; }
-            pre { background-color: #f6f8fa; border: 1px solid #ddd; padding: 12px; font-family: 'Consolas', 'Courier New', monospace; font-size: 9.5pt; margin: 10pt 0; white-space: pre-wrap; }
-            code { background-color: #f1f5f9; padding: 2px 4px; font-family: monospace; font-size: 9.5pt; }
-            p { margin-bottom: 8pt; }
-            a { color: #00E5FF; text-decoration: underline; }
-            ul, ol { margin-bottom: 8pt; padding-left: 20px; }
-            .copy-code-btn { display: none !important; }
-        </style>
-    </head>
-    <body>
-        <div style="border-bottom: 2px solid #1B2035; padding-bottom: 10px; margin-bottom: 20px;">
-            <p style="font-size: 14pt; font-weight: bold; color: #1B2035; margin: 0;">CYPHER AI — ASSISTANT TECHNIQUE D'ÉLITE</p>
-            <p style="font-size: 9pt; color: #666666; margin: 2px 0 0;">Développé par DJAKOUA KWANKAM • IUT de Douala</p>
-        </div>
-        <div>
-            ${bubbleElement.innerHTML}
-        </div>
-    </body>
-    </html>`;
-    
-    const blob = new Blob(['\ufeff' + htmlHeader], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `cypher_document_${Date.now()}.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast("Fichier Word exporté avec succès !", "success");
-}
-
-// 4. PPTX Exporter (constructs slide presentations step-by-step from headings and code blocks)
-function exportMessageToPPTX(bubbleElement, rawContent) {
-    if (typeof pptxgen === "undefined") {
-        showToast("Le module PPTX n'est pas encore disponible.", "error");
-        return;
-    }
-    
-    showToast("Génération de la présentation PPTX...", "info");
-    
-    const pptx = new pptxgen();
-    
-    pptx.defineLayout({ name: 'CYPHER_STYLE', width: 10, height: 5.625 });
-    pptx.layout = 'CYPHER_STYLE';
-    
-    // Slide 1: Title Slide
-    const slide1 = pptx.addSlide();
-    slide1.background = { color: '090A0F' };
-    
-    slide1.addShape(pptx.shapes.RECTANGLE, { x: 0, y: 0, w: 10, h: 0.1, fill: { color: '00E5FF' } });
-    slide1.addShape(pptx.shapes.RECTANGLE, { x: 0, y: 5.525, w: 10, h: 0.1, fill: { color: '00FFAA' } });
-    
-    slide1.addText("CYPHER AI", {
-        x: 0.5, y: 1.8, w: 9.0, h: 0.8,
-        fontSize: 38, fontWeight: 'bold', fontFace: 'Trebuchet MS',
-        color: '00E5FF', align: 'center'
-    });
-    
-    slide1.addText("Synthèse technique de la discussion", {
-        x: 0.5, y: 2.7, w: 9.0, h: 0.5,
-        fontSize: 16, fontFace: 'Arial',
-        color: 'F8FAFC', align: 'center'
-    });
-    
-    slide1.addText("Conçu par DJAKOUA KWANKAM - Étudiant à l'IUT de Douala\nSession 2026", {
-        x: 0.5, y: 4.2, w: 9.0, h: 0.6,
-        fontSize: 11, fontFace: 'Arial',
-        color: '94A3B8', align: 'center'
-    });
-    
-    const sections = Array.from(bubbleElement.querySelectorAll("h1, h2, h3, p, pre"));
-    let slideTitle = "";
-    let slideBullets = [];
-    let slideCode = "";
-    
-    function commitSlide() {
-        if (!slideTitle && slideBullets.length === 0 && !slideCode) return;
-        
-        const newSlide = pptx.addSlide();
-        newSlide.background = { color: '0C0E17' };
-        
-        newSlide.addText(slideTitle || "Détails Techniques", {
-            x: 0.5, y: 0.4, w: 9.0, h: 0.6,
-            fontSize: 22, fontWeight: 'bold', fontFace: 'Trebuchet MS',
-            color: '00E5FF'
-        });
-        
-        newSlide.addShape(pptx.shapes.RECTANGLE, { x: 0.5, y: 1.0, w: 9.0, h: 0.02, fill: { color: '1E2235' } });
-        
-        if (slideCode) {
-            if (slideBullets.length > 0) {
-                newSlide.addText(slideBullets.map(b => `• ${b}`).join("\n\n"), {
-                    x: 0.5, y: 1.3, w: 4.2, h: 3.8,
-                    fontSize: 12, fontFace: 'Arial',
-                    color: '94A3B8', align: 'left',
-                    valign: 'top'
-                });
-                
-                newSlide.addText(slideCode.substring(0, 400) + (slideCode.length > 400 ? "\n..." : ""), {
-                    x: 4.9, y: 1.3, w: 4.6, h: 3.8,
-                    fontSize: 10, fontFace: 'Courier New',
-                    color: '00FFAA', fill: { color: '06070D' },
-                    lineSpacing: 1.1,
-                    valign: 'top',
-                    margin: 10
-                });
-            } else {
-                newSlide.addText(slideCode.substring(0, 800) + (slideCode.length > 800 ? "\n..." : ""), {
-                    x: 0.5, y: 1.3, w: 9.0, h: 3.8,
-                    fontSize: 10, fontFace: 'Courier New',
-                    color: '00FFAA', fill: { color: '06070D' },
-                    lineSpacing: 1.1,
-                    valign: 'top',
-                    margin: 10
-                });
-            }
-        } else {
-            const textContent = slideBullets.length > 0 
-                ? slideBullets.map(b => `• ${b}`).join("\n\n") 
-                : "Consultez les détails de la réponse générée.";
-                
-            newSlide.addText(textContent, {
-                x: 0.5, y: 1.3, w: 9.0, h: 3.8,
-                fontSize: 13, fontFace: 'Arial',
-                color: '94A3B8', align: 'left',
-                valign: 'top'
-            });
-        }
-        
-        newSlide.addText("Cypher AI • DJAKOUA KWANKAM (IUT Douala)", {
-            x: 0.5, y: 5.2, w: 9.0, h: 0.3,
-            fontSize: 9, fontFace: 'Arial',
-            color: '64748B', align: 'right'
-        });
-        
-        slideBullets = [];
-        slideCode = "";
-        slideTitle = "";
-    }
-    
-    sections.forEach(el => {
-        if (el.tagName === "H1" || el.tagName === "H2" || el.tagName === "H3") {
-            commitSlide();
-            slideTitle = el.innerText.trim();
-        } else if (el.tagName === "PRE") {
-            const codeEl = el.querySelector("code");
-            if (codeEl) {
-                slideCode = codeEl.innerText.trim();
-            }
-        } else if (el.tagName === "P") {
-            const pText = el.innerText.trim();
-            if (pText && pText.length > 5) {
-                slideBullets.push(pText.substring(0, 150) + (pText.length > 150 ? "..." : ""));
-            }
-        }
-    });
-    
-    commitSlide();
-    
-    pptx.writeFile({ fileName: `cypher_slides_${Date.now()}.pptx` }).then(() => {
-        showToast("Présentation PPTX téléchargée avec succès !", "success");
-    }).catch(err => {
-        showToast(`Erreur d'export PPTX: ${err.message}`, "error");
-    });
-}
