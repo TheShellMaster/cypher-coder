@@ -1,0 +1,9 @@
+cypher-chat-app/node_modules/
+cypher-chat-app/temp_logs/
+.DS_Store
+*.log
+temp_logs/
+venv/
+__pycache__/
+**/logo.png
+**/.env

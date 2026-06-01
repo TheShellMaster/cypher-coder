@@ -1,0 +1,14 @@
+{
+  "name": "cypher-chat-app",
+  "version": "1.0.0",
+  "description": "Standalone desktop and mobile client for Cypher AI",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}

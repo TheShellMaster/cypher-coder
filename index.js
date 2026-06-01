@@ -53,7 +53,7 @@ let macros = {};
 let logs = [];
 
 const sessionConfig = {
-    model: "Qwen/Qwen2.5-Coder-32B-Instruct",
+    model: "Qwen/Qwen2.5-Coder-7B-Instruct",
     temperature: 0.7,
     top_p: 0.9,
     max_tokens: 2048,
@@ -989,7 +989,7 @@ async function handleSlashCommand(text) {
             console.log(`Nom        : ${APP_NAME}`);
             console.log(`Créateur   : ${AUTHOR} (Étudiant IUT)`);
             console.log(`Description: Assistant IA autonome de codage local et réseau.`);
-            console.log(`Modèle     : Qwen/Qwen2.5-Coder-32B-Instruct`);
+            console.log(`Modèle     : Qwen/Qwen2.5-Coder-7B-Instruct`);
             console.log(`Réseau     : FastAPI + Gradio (Docker Space HF)`);
             console.log(`Données    : Collecte active de logs pour le dataset d'entraînement.\n`);
             break;
@@ -1127,7 +1127,7 @@ async function handleSlashCommand(text) {
         case '/model':
             if (cleanArgs[0] === 'list') {
                 console.log(chalk.cyan("Modèles disponibles via Hugging Face Inference :"));
-                console.log("  - Qwen/Qwen2.5-Coder-32B-Instruct (Recommandé - Actif par défaut)");
+                console.log("  - Qwen/Qwen2.5-Coder-7B-Instruct (Recommandé - Actif par défaut)");
                 console.log("  - meta-llama/Llama-3.3-70B-Instruct");
                 console.log("  - deepseek-ai/DeepSeek-Coder-V2-Instruct");
             } else if (cleanArgs[0] === 'set') {
@@ -1449,7 +1449,7 @@ async function handleSlashCommand(text) {
                     console.log(chalk.red("Clé introuvable."));
                 }
             } else if (cleanArgs[0] === 'reset') {
-                sessionConfig.model = "Qwen/Qwen2.5-Coder-32B-Instruct";
+                sessionConfig.model = "Qwen/Qwen2.5-Coder-7B-Instruct";
                 sessionConfig.temperature = 0.7;
                 sessionConfig.max_tokens = 2048;
                 console.log(chalk.green("Configuration réinitialisée."));

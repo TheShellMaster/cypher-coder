@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 
 token = os.environ.get("HF_TOKEN")
-client = InferenceClient("Qwen/Qwen2.5-Coder-32B-Instruct", token=token)
+client = InferenceClient("Qwen/Qwen2.5-Coder-7B-Instruct", token=token)
 api = HfApi(token=token)
 
 app = FastAPI()
@@ -89,7 +89,7 @@ async def chat(request: Request):
         username = body.get("username", "local-user")
         
         # dynamic inference parameters
-        model = body.get("model", "Qwen/Qwen2.5-Coder-32B-Instruct")
+        model = body.get("model", "Qwen/Qwen2.5-Coder-7B-Instruct")
         temperature = body.get("temperature", None)
         top_p = body.get("top_p", None)
         max_tokens = body.get("max_tokens", 2048)
@@ -597,7 +597,7 @@ with gr.Blocks(theme=theme, css=css) as demo:
     ## 🧠 Gestion des Connaissances & Accès à la Documentation
     
     Pour répondre à vos questions techniques ou de configuration système, **Cypher Coder** n'embarque pas l'intégralité de la documentation Linux en mémoire constante. Il fonctionne de manière dynamique :
-    - 💡 **Connaissance Pré-entraînée** : Le modèle `Qwen2.5-Coder-32B` possède déjà une connaissance approfondie des commandes, APIs et architectures Linux standards acquise lors de sa phase d'entraînement.
+    - 💡 **Connaissance Pré-entraînée** : Le modèle `Qwen2.5-Coder-7B` possède déjà une connaissance approfondie des commandes, APIs et architectures Linux standards acquise lors de sa phase d'entraînement.
     - 📁 **Accès Local aux Manuels** : Il peut exécuter de manière autonome des commandes comme `man <commande>` ou `<commande> --help` via `run_command` pour lire la documentation système locale.
     - 🔍 **Recherche Web en Temps Réel** : Grâce à sa capacité à appeler l'outil `search_web`, il interroge internet en temps réel pour obtenir des guides et documentations à jour si nécessaire.
 

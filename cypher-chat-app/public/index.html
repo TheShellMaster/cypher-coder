@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cypher AI — Chat App</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Panel -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="app-brand">
+                    <img src="logo.png" alt="Cypher AI Logo" class="brand-logo">
+                    <div class="brand-text">
+                        <h2>CYPHER AI</h2>
+                        <span>v1.0 Standalone</span>
+                    </div>
+                </div>
+                <button class="close-sidebar-btn" id="closeSidebarBtn">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            
+            <div class="sidebar-actions">
+                <button class="new-chat-btn" id="newChatBtn">
+                    <i data-lucide="plus"></i> Nouvelle discussion
+                </button>
+            </div>
+            
+            <div class="chat-history-list" id="chatHistoryList">
+                <!-- Chat history items will be dynamically injected here -->
+            </div>
+            
+            <div class="sidebar-footer">
+                <button class="settings-trigger-btn" id="settingsBtn">
+                    <i data-lucide="settings"></i> Réglages
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-main">
+            <!-- Chat Header -->
+            <header class="chat-header">
+                <div class="header-left">
+                    <button class="menu-toggle-btn" id="menuToggleBtn">
+                        <i data-lucide="menu"></i>
+                    </button>
+                    <div class="chat-identity">
+                        <img src="logo.png" alt="Cypher Logo" class="header-avatar">
+                        <div class="chat-identity-text">
+                            <h3>Cypher AI</h3>
+                            <div class="status-indicator">
+                                <span class="status-dot"></span>
+                                <span id="statusText">Connecté au serveur</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <button class="header-action-btn" id="clearChatBtn" title="Effacer l'historique local">
+                        <i data-lucide="trash-2"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Messages List -->
+            <section class="messages-container" id="messagesContainer">
+                <div class="welcome-view" id="welcomeView">
+                    <img src="logo.png" alt="Cypher Large Logo" class="welcome-logo">
+                    <h1>Bienvenue sur Cypher AI</h1>
+                    <p>Votre assistant d'élite pour le développement et la programmation.</p>
+                    <div class="quick-examples">
+                        <button class="example-card" onclick="setInputText('Crée une fonction Python pour trier un dictionnaire par valeur.')">
+                            <h4>🐍 Exemple Python</h4>
+                            <p>Trier un dictionnaire par valeur.</p>
+                        </button>
+                        <button class="example-card" onclick="setInputText('Recherche sur le web : actualités IA de la semaine')">
+                            <h4>🌐 Recherche Web</h4>
+                            <p>Actualités technologiques récentes.</p>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Input Bar -->
+            <footer class="input-container">
+                <!-- Attachment Preview Container -->
+                <div class="attachment-preview-container" id="attachmentPreviewContainer" style="display: none;">
+                    <!-- Chips will be added dynamically here -->
+                </div>
+                
+                <div class="input-tools">
+                    <div class="search-toggle-wrapper">
+                        <label class="switch">
+                            <input type="checkbox" id="webSearchToggle" checked>
+                            <span class="slider round"></span>
+                        </label>
+                        <span class="toggle-label"><i data-lucide="globe" size="14"></i> Recherche Web</span>
+                    </div>
+                </div>
+                
+                <div class="input-bar">
+                    <input type="file" id="fileInput" style="display: none;" multiple accept=".txt,.js,.py,.html,.css,.json,.md,.csv,.log,.sh,.bat,.xml,.yml,.yaml,.ini,.conf,.java,.cpp,.c,.h,.cs,.go,.rs,.ts,.jsx,.tsx">
+                    <button id="attachBtn" class="attach-btn" type="button" title="Joindre un fichier de code/texte">
+                        <i data-lucide="paperclip"></i>
+                    </button>
+                    <textarea id="userInput" placeholder="Posez une question technique ou glissez des fichiers..." rows="1"></textarea>
+                    <button id="sendBtn" class="send-btn" disabled>
+                        <i data-lucide="send"></i>
+                    </button>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Réglages de l'application</h3>
+                <button class="close-modal-btn" id="closeModalBtn">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="usernameInput">Nom d'utilisateur</label>
+                    <input type="text" id="usernameInput" placeholder="Entrez votre nom (ex. DJAKOUA)">
+                    <span class="help-text">Utilisé pour identifier vos logs dans le dataset d'entraînement.</span>
+                </div>
+                <div class="form-group">
+                    <label for="tokenInput">Token Hugging Face (Optionnel)</label>
+                    <input type="password" id="tokenInput" placeholder="hf_...">
+                    <span class="help-text">Laissez vide pour utiliser le token par défaut de l'application.</span>
+                </div>
+                <div class="form-group">
+                    <label for="modeSelect">Mode de Connexion</label>
+                    <select id="modeSelect">
+                        <option value="local">Serveur Local (Recherche Web active)</option>
+                        <option value="direct">Direct Hugging Face (Sans serveur, CORS restreint)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-settings-btn" id="saveSettingsBtn">Sauvegarder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Markdown Parser Library (marked) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="app.js"></script>
+    <script>
+        // Set userInput text helper
+        function setInputText(text) {
+            const input = document.getElementById('userInput');
+            input.value = text;
+            input.dispatchEvent(new Event('input'));
+            input.focus();
+        }
+    </script>
+</body>
+</html>
