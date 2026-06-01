@@ -75,86 +75,60 @@ def save_log_background(username: str, message: str, response: str):
     thread.daemon = True
     thread.start()
 
-def add_user_message(message, history):
-    if not message.strip():
-        return "", history
-    history.append({"role": "user", "content": message})
-    return "", history
-
-def generate_response(history, web_search_enabled, request=None):
-    if not history or history[-1]["role"] != "user":
-        yield history
-        return
-        
+def respond(message, history, request: gr.Request = None):
     username = "invité"
     if request:
         username = request.headers.get("x-hf-user-name") or "invité"
-        
-    user_message = history[-1]["content"]
+
+    # Format history for Inference API
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for h in history:
+        if isinstance(h, dict):
+            messages.append({"role": h["role"], "content": h["content"]})
+        elif isinstance(h, (list, tuple)) and len(h) == 2:
+            if h[0]:
+                messages.append({"role": "user", "content": h[0]})
+            if h[1]:
+                messages.append({"role": "assistant", "content": h[1]})
+
+    # Analyse et déclenchement de la recherche web
+    search_needed = False
+    search_query = message
+    msg_lower = message.lower()
     
-    # 1. Analyse et déclenchement de la recherche web
-    search_needed = web_search_enabled
-    search_query = user_message
-    msg_lower = user_message.lower()
-    
-    # Mots-clés déclencheurs de recherche
     keywords = [
         "cherche sur le web", "recherche sur le web", "cherche sur internet", "recherche sur internet",
         "actualités", "actualité", "dernière version", "nouveautés de", "nouveautés sur",
         "météo", "cours de l'action", "dernières nouvelles"
     ]
     
-    if not search_needed:
-        for kw in keywords:
-            if kw in msg_lower:
-                search_needed = True
-                search_query = user_message
-                for kw_to_remove in keywords:
-                    search_query = search_query.replace(kw_to_remove, "")
-                search_query = search_query.strip(" :?./\"'()")
-                if not search_query or len(search_query) < 3:
-                    search_query = user_message
-                break
-                
-    if user_message.startswith("/web ") or user_message.startswith("/search "):
+    for kw in keywords:
+        if kw in msg_lower:
+            search_needed = True
+            for kw_to_remove in keywords:
+                search_query = search_query.replace(kw_to_remove, "")
+            search_query = search_query.strip(" :?./\"'()")
+            if not search_query or len(search_query) < 3:
+                search_query = message
+            break
+            
+    if message.startswith("/web ") or message.startswith("/search "):
         search_needed = True
-        parts = user_message.split(" ", 1)
-        search_query = parts[1] if len(parts) > 1 else user_message
+        parts = message.split(" ", 1)
+        search_query = parts[1] if len(parts) > 1 else message
 
     context = ""
     if search_needed and search_query:
-        # Ajout du message de statut de recherche
-        history.append({"role": "assistant", "content": f"🔍 *Recherche en cours sur le web pour : '{search_query}'...*"})
-        yield history
-        
+        yield "🔍 *Recherche en cours sur le web...*"
         search_res = search_web(search_query)
         context = f"\n\n[CONTEXTE DU WEB]\n{search_res}\n[FIN DU CONTEXTE]"
-        
-        history[-1]["content"] = f"🔍 *Résultats de recherche intégrés pour : '{search_query}'. Génération de la réponse...*"
-        yield history
+        yield "🔍 *Résultats de recherche intégrés. Génération de la réponse...*"
 
-    # Reconstitution des messages pour l'API d'inférence
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    
-    if search_needed and search_query:
-        # Exclure le message de statut de recherche de l'historique envoyé à l'IA
-        for h in history[:-1]:
-            messages.append({"role": h["role"], "content": h["content"]})
-    else:
-        for h in history:
-            messages.append({"role": h["role"], "content": h["content"]})
-            
     if context:
         messages[0]["content"] += f"\nTu as accès aux résultats de recherche suivants pour répondre à l'utilisateur : {context}"
 
-    # Remplacement/Ajout de l'assistant dans l'interface
-    if search_needed and search_query:
-        history[-1] = {"role": "assistant", "content": ""}
-    else:
-        history.append({"role": "assistant", "content": ""})
-        
-    yield history
-    
+    messages.append({"role": "user", "content": message})
+
     response_text = ""
     try:
         final_stream = client.chat_completion(
@@ -169,16 +143,13 @@ def generate_response(history, web_search_enabled, request=None):
                 token_val = chunk.choices[0].delta.content
                 if token_val:
                     response_text += token_val
-                    history[-1]["content"] = response_text
-                    yield history
+                    yield response_text
                     
         # Enregistrement asynchrone des logs
-        save_log_background(username, user_message, response_text)
+        save_log_background(username, message, response_text)
         
     except Exception as e:
-        error_msg = f"⚠️ Une erreur est survenue lors de la communication avec l'IA : {str(e)}"
-        history[-1]["content"] = error_msg
-        yield history
+        yield f"⚠️ Une erreur est survenue lors de la communication avec l'IA : {str(e)}"
 
 # -----------------------------------------------------
 # CONFIGURATION ET THÉMATISATION DE L'INTERFACE
@@ -200,200 +171,17 @@ theme = gr.themes.Default(
 )
 
 css = """
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
-
-body {
-    background: radial-gradient(circle at top right, #0F1323, #090A0F) !important;
-    font-family: 'Outfit', sans-serif !important;
-}
-
-code, pre {
-    font-family: 'JetBrains Mono', monospace !important;
-}
-
-.gradio-container {
-    max-width: 1100px !important;
-    margin: 0 auto !important;
-    padding: 20px !important;
-}
-
-.cypher-header-container {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    padding: 24px;
-    background: linear-gradient(135deg, #11131C 0%, #161926 100%);
-    border: 1px solid #1E2235;
-    border-radius: 16px;
-    margin-bottom: 24px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-}
-
-.cypher-logo {
-    width: 80px;
-    height: 80px;
-    border-radius: 14px;
-    border: 2px solid #00FFAA;
-    box-shadow: 0 0 20px rgba(0, 255, 170, 0.4);
-    object-fit: cover;
-}
-
-.cypher-header-text {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.cypher-title {
-    font-size: 32px;
-    font-weight: 800;
-    margin: 0;
-    background: linear-gradient(90deg, #00FFAA, #00E5FF);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    letter-spacing: 1.5px;
-    line-height: 1.2;
-}
-
-.cypher-subtitle {
-    font-size: 15px;
-    color: #94A3B8;
-    margin: 0;
-}
-
-.cypher-badge {
-    font-size: 12px;
-    color: #64748B;
-    margin: 0;
-}
-
-.cypher-badge strong {
-    color: #00E5FF;
-}
-
-#cypher-chatbot {
-    background-color: #11131C !important;
-    border: 1px solid #1E2235 !important;
-    border-radius: 16px !important;
-    box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.5) !important;
-    padding: 10px !important;
-}
-
-#cypher-chatbot .user, #cypher-chatbot .message.user {
-    background: linear-gradient(135deg, #1B2035 0%, #161926 100%) !important;
-    border: 1px solid #282E4F !important;
-    color: #E2E8F0 !important;
-    border-radius: 16px 16px 0px 16px !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
-}
-
-#cypher-chatbot .bot, #cypher-chatbot .message.assistant {
-    background: linear-gradient(135deg, #0C1A24 0%, #0E1620 100%) !important;
-    border: 1px solid #00E5FF33 !important;
-    color: #E2E8F0 !important;
-    border-radius: 16px 16px 16px 0px !important;
-    box-shadow: 0 4px 15px rgba(0, 229, 255, 0.05) !important;
-}
-
-input[type="text"], textarea {
-    border: 1px solid #1E2235 !important;
-    background-color: #161926 !important;
-    color: #F8FAFC !important;
-    border-radius: 10px !important;
-    transition: all 0.3s ease !important;
-}
-
-input[type="text"]:focus, textarea:focus {
-    border-color: #00FFAA !important;
-    box-shadow: 0 0 10px rgba(0, 255, 170, 0.2) !important;
-}
-
-.gr-button-primary {
-    background: linear-gradient(90deg, #00FFAA, #00E5FF) !important;
-    color: #090A0F !important;
-    font-weight: 700 !important;
-    border: none !important;
-    box-shadow: 0 4px 15px rgba(0, 255, 170, 0.2) !important;
-    transition: all 0.3s ease !important;
-}
-
-.gr-button-primary:hover {
-    box-shadow: 0 0 20px rgba(0, 255, 170, 0.5) !important;
-    transform: translateY(-1px);
-}
-
-.web-search-row {
-    background-color: #11131C;
-    border: 1px solid #1E2235;
-    border-radius: 12px;
-    padding: 10px 15px;
-    margin-top: 10px;
-}
-
 footer {
     display: none !important;
 }
 """
 
-logo_abs_path = os.path.abspath("logo.png")
-
 with gr.Blocks(theme=theme, css=css) as demo:
-    # Header personnalisé avec logo et descriptif
-    gr.HTML(f"""
-    <div class="cypher-header-container">
-        <img src="file/{logo_abs_path}" class="cypher-logo" alt="Cypher AI Logo">
-        <div class="cypher-header-text">
-            <h1 class="cypher-title">CYPHER AI</h1>
-            <p class="cypher-subtitle">L'assistant de programmation d'élite & recherche web connectée 🌐</p>
-            <p class="cypher-badge">Développé par <strong>DJAKOUA KWANKAM</strong> (IUT de Douala)</p>
-        </div>
-    </div>
-    """)
-    
-    chatbot = gr.Chatbot(elem_id="cypher-chatbot")
-    
-    with gr.Row():
-        msg = gr.Textbox(
-            placeholder="Posez votre question technique ou demandez de l'aide sur du code...",
-            scale=8,
-            show_label=False,
-            container=False
-        )
-        submit = gr.Button("Envoyer", scale=1, variant="primary")
-        
-    with gr.Row(elem_classes=["web-search-row"]):
-        web_search = gr.Checkbox(
-            label="🌐 Activer la recherche Web en direct (DuckDuckGo)",
-            value=False,
-            interactive=True
-        )
-        clear = gr.Button("Effacer la conversation", scale=1, size="sm")
-
-    # Événements de soumission
-    msg.submit(
-        add_user_message,
-        inputs=[msg, chatbot],
-        outputs=[msg, chatbot],
-        queue=False
-    ).then(
-        generate_response,
-        inputs=[chatbot, web_search],
-        outputs=[chatbot]
+    gr.ChatInterface(
+        respond,
+        title="CYPHER AI",
+        description="L'assistant de programmation d'élite. Développé par DJAKOUA KWANKAM (IUT de Douala).",
     )
-    
-    submit.click(
-        add_user_message,
-        inputs=[msg, chatbot],
-        outputs=[msg, chatbot],
-        queue=False
-    ).then(
-        generate_response,
-        inputs=[chatbot, web_search],
-        outputs=[chatbot]
-    )
-    
-    # Effacer la conversation
-    clear.click(lambda: [], None, chatbot)
 
 if __name__ == "__main__":
     demo.queue().launch(

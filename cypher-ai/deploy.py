@@ -36,7 +36,7 @@ try:
         repo_id=repo_id,
         repo_type="space",
         token=token,
-        ignore_patterns=["deploy.py", "venv/**", ".git/**", ".cache/**", "test_*.py", "__pycache__/**"]
+        ignore_patterns=["deploy.py", "venv/**", ".git/**", ".cache/**", "test_*.py", "__pycache__/**", ".env"]
     )
     
     print(f"\n✅ Cypher AI a été déployé avec succès !")
