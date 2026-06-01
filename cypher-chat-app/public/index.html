@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Cypher AI — Chat App</title>
+    <link rel="icon" type="image/png" href="logo.png">
     <link rel="stylesheet" href="style.css">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -11,6 +12,18 @@
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
+    <!-- Startup loading screen -->
+    <div class="startup-loader" id="startupLoader">
+        <div class="loader-content">
+            <img src="logo.png" alt="Cypher AI Logo" class="loader-logo">
+            <h2 class="loader-title">CYPHER AI</h2>
+            <div class="loader-bar-container">
+                <div class="loader-bar"></div>
+            </div>
+            <p class="loader-subtitle">Chargement des modules d'élite...</p>
+        </div>
+    </div>
+
     <div class="app-container">
         <!-- Sidebar Panel -->
         <aside class="sidebar" id="sidebar">

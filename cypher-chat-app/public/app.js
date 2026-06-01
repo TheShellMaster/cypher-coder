@@ -60,6 +60,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     setupEventListeners();
+
+    // Hide startup loader smoothly
+    const loader = document.getElementById("startupLoader");
+    if (loader) {
+        setTimeout(() => {
+            loader.classList.add("fade-out");
+            setTimeout(() => loader.remove(), 600);
+        }, 1500); // 1.5 seconds premium delay
+    }
 });
 
 // Settings & Theme Initialization
