@@ -262,18 +262,8 @@ function loadConversation(id) {
     attachedFiles = [];
     localStorage.setItem("cypher_current_id", currentConversationId);
     
-    messagesContainer.innerHTML = "";
-    if (currentMessages.length === 0) {
-        messagesContainer.appendChild(welcomeView);
-        welcomeView.style.display = "flex";
-    } else {
-        welcomeView.style.display = "none";
-        currentMessages.forEach(msg => {
-            renderMessage(msg.role, msg.content);
-        });
-    }
+    redrawCurrentConversation();
     renderAttachmentChips();
-    scrollToBottom();
     renderConversationsList();
 }
 
@@ -302,20 +292,176 @@ function renderMessage(role, content) {
     bubble.classList.add("message-bubble");
     
     // Check if message content has file markers to display them nicely
-    // Format: [Fichier attaché : name]\n```\ncontent\n```
     let displayContent = content;
-    const fileHeaderRegex = /\[Fichier attaché : ([^\]]+)\]\n```[\s\S]*?```\n\n/g;
-    
-    // We clean the display text slightly if we want, or just let marked parse it.
-    // Standard markdown code blocks parsed by marked look excellent, so we just let it run.
     bubble.innerHTML = parseMarkdown(displayContent);
     
     wrapper.appendChild(label);
     wrapper.appendChild(bubble);
+    
+    // Create Toolbar Actions Row
+    const actionsRow = document.createElement("div");
+    actionsRow.className = "message-actions";
+    
+    if (role === "assistant") {
+        actionsRow.innerHTML = `
+            <button class="action-btn copy-btn" title="Copier la réponse">
+                <i data-lucide="copy" size="14"></i>
+            </button>
+            <button class="action-btn like-btn" title="Aimer la réponse">
+                <i data-lucide="thumbs-up" size="14"></i>
+            </button>
+            <button class="action-btn dislike-btn" title="Détester la réponse">
+                <i data-lucide="thumbs-down" size="14"></i>
+            </button>
+            <button class="action-btn share-btn" title="Partager la discussion">
+                <i data-lucide="share-2" size="14"></i>
+            </button>
+        `;
+        
+        // Copy action
+        const copyBtn = actionsRow.querySelector(".copy-btn");
+        copyBtn.addEventListener("click", () => {
+            navigator.clipboard.writeText(content).then(() => {
+                const icon = copyBtn.querySelector("i");
+                icon.setAttribute("data-lucide", "check");
+                lucide.createIcons({ scope: copyBtn });
+                setTimeout(() => {
+                    icon.setAttribute("data-lucide", "copy");
+                    lucide.createIcons({ scope: copyBtn });
+                }, 2000);
+            });
+        });
+        
+        // Like action
+        const likeBtn = actionsRow.querySelector(".like-btn");
+        const dislikeBtn = actionsRow.querySelector(".dislike-btn");
+        likeBtn.addEventListener("click", () => {
+            likeBtn.classList.toggle("active");
+            dislikeBtn.classList.remove("active");
+        });
+        
+        // Dislike action
+        dislikeBtn.addEventListener("click", () => {
+            dislikeBtn.classList.toggle("active");
+            likeBtn.classList.remove("active");
+        });
+        
+        // Share action
+        const shareBtn = actionsRow.querySelector(".share-btn");
+        shareBtn.addEventListener("click", () => {
+            let shareText = `--- Discussion Cypher AI ---\n\n`;
+            currentMessages.forEach(m => {
+                shareText += `${m.role === 'user' ? 'Utilisateur' : 'Cypher AI'}:\n${m.content}\n\n`;
+            });
+            navigator.clipboard.writeText(shareText).then(() => {
+                alert("Discussion copiée dans le presse-papiers pour partage !");
+            });
+        });
+        
+    } else { // user
+        actionsRow.innerHTML = `
+            <button class="action-btn copy-btn" title="Copier le message">
+                <i data-lucide="copy" size="14"></i>
+            </button>
+            <button class="action-btn edit-btn" title="Modifier le message">
+                <i data-lucide="edit-3" size="14"></i>
+            </button>
+            <button class="action-btn retry-btn" title="Réessayer l'envoi">
+                <i data-lucide="refresh-cw" size="14"></i>
+            </button>
+        `;
+        
+        // Copy action
+        const copyBtn = actionsRow.querySelector(".copy-btn");
+        copyBtn.addEventListener("click", () => {
+            navigator.clipboard.writeText(content).then(() => {
+                const icon = copyBtn.querySelector("i");
+                icon.setAttribute("data-lucide", "check");
+                lucide.createIcons({ scope: copyBtn });
+                setTimeout(() => {
+                    icon.setAttribute("data-lucide", "copy");
+                    lucide.createIcons({ scope: copyBtn });
+                }, 2000);
+            });
+        });
+        
+        // Edit Action
+        const editBtn = actionsRow.querySelector(".edit-btn");
+        editBtn.addEventListener("click", () => {
+            if (bubble.querySelector(".edit-textarea")) return;
+            
+            const originalText = content;
+            bubble.innerHTML = `
+                <textarea class="edit-textarea">${originalText}</textarea>
+                <div class="edit-actions">
+                    <button class="edit-save-btn">Enregistrer & Renvoyer</button>
+                    <button class="edit-cancel-btn">Annuler</button>
+                </div>
+            `;
+            
+            const textarea = bubble.querySelector(".edit-textarea");
+            textarea.focus();
+            textarea.style.height = "auto";
+            textarea.style.height = textarea.scrollHeight + "px";
+            textarea.addEventListener("input", () => {
+                textarea.style.height = "auto";
+                textarea.style.height = textarea.scrollHeight + "px";
+            });
+            
+            bubble.querySelector(".edit-cancel-btn").addEventListener("click", (e) => {
+                e.stopPropagation();
+                bubble.innerHTML = parseMarkdown(originalText);
+                addCopyCodeButtons(bubble);
+            });
+            
+            bubble.querySelector(".edit-save-btn").addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const newText = textarea.value.trim();
+                if (!newText) return;
+                
+                const msgIndex = currentMessages.findIndex(m => m.role === "user" && m.content === originalText);
+                if (msgIndex > -1) {
+                    currentMessages[msgIndex].content = newText;
+                    currentMessages = currentMessages.slice(0, msgIndex + 1);
+                    redrawCurrentConversation();
+                    await streamAIResponse();
+                }
+            });
+        });
+        
+        // Retry Action
+        const retryBtn = actionsRow.querySelector(".retry-btn");
+        retryBtn.addEventListener("click", async () => {
+            const msgIndex = currentMessages.findIndex(m => m.role === "user" && m.content === content);
+            if (msgIndex > -1) {
+                currentMessages = currentMessages.slice(0, msgIndex + 1);
+                redrawCurrentConversation();
+                await streamAIResponse();
+            }
+        });
+    }
+    
+    wrapper.appendChild(actionsRow);
     messagesContainer.appendChild(wrapper);
     
+    lucide.createIcons({ scope: actionsRow });
     addCopyCodeButtons(bubble);
     return bubble;
+}
+
+// Redraw entire chat history in view
+function redrawCurrentConversation() {
+    messagesContainer.innerHTML = "";
+    if (currentMessages.length === 0) {
+        messagesContainer.appendChild(welcomeView);
+        welcomeView.style.display = "flex";
+    } else {
+        welcomeView.style.display = "none";
+        currentMessages.forEach(msg => {
+            renderMessage(msg.role, msg.content);
+        });
+    }
+    scrollToBottom();
 }
 
 // Parse markdown securely
@@ -399,11 +545,16 @@ async function sendMessage() {
     sendBtn.disabled = true;
     scrollToBottom();
     
-    // 2. Add empty bot bubble for streaming response
+    await streamAIResponse();
+}
+
+// Stream AI Response with logs and sources
+async function streamAIResponse() {
+    // Add empty bot bubble for streaming response
     const botBubble = renderMessage("assistant", "...");
     let botResponseText = "";
     
-    // 3. Search logs UI variables
+    // Search logs UI variables
     let searchLogsBox = null;
     let searchLogsList = null;
     let searchSourcesList = null;
