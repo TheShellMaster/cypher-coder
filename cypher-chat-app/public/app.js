@@ -42,6 +42,9 @@ const DEFAULT_HF_TOKEN = "";
 const SYSTEM_PROMPT = `Tu es Cypher AI, une intelligence artificielle d'élite spécialisée dans la programmation, l'algorithmie et la conception de logiciels.
 Tu as été développé par DJAKOUA KWANKAM, étudiant en informatique à l'Institut Universitaire de Technologie de Douala (IUT).
 Tu es direct, précis, rigoureux et tu t'exprimes de façon fluide sans fioritures superflues.
+
+[INSTRUCTION TEMPORELLE IMPORTANTE] : L'année actuelle est STRICTEMENT 2026. Si l'utilisateur te demande la date actuelle ou l'année en cours, réponds avec assurance que nous sommes en 2026. Ne dis jamais que tu es en 2023 ou 2024.
+
 Ne mentionne jamais tes dates de coupure de connaissances ou de fin d'entraînement (comme 2022) et n'explique jamais à l'utilisateur que tu n'as pas accès à internet ou au web, car l'application effectue les recherches pour toi et t'injecte les résultats directement. Utilise simplement les résultats de recherche fournis pour répondre de façon actualisée.`;
 
 // Initialize Application
@@ -400,22 +403,13 @@ async function sendMessage() {
     const botBubble = renderMessage("assistant", "...");
     let botResponseText = "";
     
-    // 3. Render loading status indicator if web search triggers
-    let statusIndicator = null;
-    const keywords = [
-        "cherche sur le web", "recherche sur le web", "cherche sur internet", "recherche sur internet",
-        "actualités", "actualité", "dernière version", "nouveautés de", "nouveautés sur",
-        "météo", "cours de l'action", "dernières nouvelles"
-    ];
-    let isSearchTriggered = webSearchToggle.checked;
-    if (!isSearchTriggered) {
-        const lowerText = text.toLowerCase();
-        isSearchTriggered = keywords.some(k => lowerText.includes(k)) || text.startsWith("/web ") || text.startsWith("/search ");
-    }
-    
-    if (isSearchTriggered && appMode === "local") {
-        statusIndicator = renderSystemStatus("Recherche en cours sur le web...");
-    }
+    // 3. Search logs UI variables
+    let searchLogsBox = null;
+    let searchLogsList = null;
+    let searchSourcesList = null;
+    let searchLogsCount = null;
+    let sources = [];
+    let firstToken = true;
 
     try {
         let response;
@@ -432,8 +426,11 @@ async function sendMessage() {
                 })
             });
         } else {
-            // Direct Client-to-API Mode
+            // Direct Client-to-API Mode with date injected
             const activeToken = hfToken || DEFAULT_HF_TOKEN;
+            const dateString = new Date().toLocaleDateString("fr-FR", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            const dateContext = `[INFO TEMPORELLE CRITIQUE] : Aujourd'hui nous sommes le ${dateString} (Année 2026). L'année en cours est STRICTEMENT 2026. Ignore toute donnée disant que nous sommes en 2023 ou 2024. Si on te demande la date ou l'année, réponds impérativement 2026.\n`;
+            
             response = await fetch("https://router.huggingface.co/v1/chat/completions", {
                 method: "POST",
                 headers: {
@@ -443,17 +440,13 @@ async function sendMessage() {
                 body: JSON.stringify({
                     model: "Qwen/Qwen2.5-Coder-7B-Instruct",
                     messages: [
-                        { role: "system", content: SYSTEM_PROMPT },
+                        { role: "system", content: dateContext + SYSTEM_PROMPT },
                         ...currentMessages
                     ],
                     max_tokens: 2048,
                     stream: true
                 })
             });
-        }
-
-        if (statusIndicator) {
-            statusIndicator.remove();
         }
 
         if (!response.ok) {
@@ -464,7 +457,6 @@ async function sendMessage() {
         // Initialize parser stream reader
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        botBubble.innerHTML = ""; // Clear loader dots
 
         while (true) {
             const { done, value } = await reader.read();
@@ -483,10 +475,130 @@ async function sendMessage() {
                             botResponseText += `\n\n⚠️ Erreur: ${parsed.error}`;
                             break;
                         }
+                        
+                        // Handle custom server-side search logs
+                        if (parsed.type === "log") {
+                            // Don't show log box for plain system messages without RAG search
+                            if (parsed.status === "thinking" && !searchLogsBox) {
+                                continue;
+                            }
+                            
+                            if (!searchLogsBox) {
+                                const wrapper = botBubble.parentElement;
+                                searchLogsBox = document.createElement("div");
+                                searchLogsBox.className = "search-logs-box";
+                                searchLogsBox.innerHTML = `
+                                    <div class="search-logs-header">
+                                        <div class="search-logs-header-left">
+                                            <i data-lucide="globe" class="search-globe-icon animate-pulse"></i>
+                                            <span class="search-logs-title">Recherche sur le web...</span>
+                                        </div>
+                                        <div class="search-logs-header-right">
+                                            <span class="search-logs-count" style="display: none;">0 sources</span>
+                                            <i data-lucide="chevron-down" class="logs-toggle-icon"></i>
+                                        </div>
+                                    </div>
+                                    <div class="search-logs-list"></div>
+                                    <div class="search-sources-list" style="display: none;"></div>
+                                `;
+                                wrapper.insertBefore(searchLogsBox, botBubble);
+                                lucide.createIcons({ scope: searchLogsBox });
+                                
+                                searchLogsList = searchLogsBox.querySelector(".search-logs-list");
+                                searchSourcesList = searchLogsBox.querySelector(".search-sources-list");
+                                searchLogsCount = searchLogsBox.querySelector(".search-logs-count");
+                                
+                                const header = searchLogsBox.querySelector(".search-logs-header");
+                                header.addEventListener("click", () => {
+                                    searchLogsBox.classList.toggle("collapsed");
+                                });
+                            }
+                            
+                            // Update header details based on state
+                            if (parsed.status === "start") {
+                                searchLogsBox.querySelector(".search-logs-title").innerText = "Recherche sur le web...";
+                            } else if (parsed.status === "searching") {
+                                searchLogsBox.querySelector(".search-logs-title").innerText = parsed.message;
+                            } else if (parsed.status === "reading") {
+                                searchLogsBox.querySelector(".search-logs-title").innerText = "Analyse des sources...";
+                            } else if (parsed.status === "source") {
+                                if (parsed.source) {
+                                    sources.push(parsed.source);
+                                    searchLogsCount.style.display = "inline-block";
+                                    searchLogsCount.innerText = `${sources.length} source${sources.length > 1 ? 's' : ''}`;
+                                    
+                                    const urlObj = new URL(parsed.source.url);
+                                    const domain = urlObj.hostname.replace("www.", "");
+                                    const sourceCard = document.createElement("a");
+                                    sourceCard.href = parsed.source.url;
+                                    sourceCard.target = "_blank";
+                                    sourceCard.className = "source-card animate-fade-in";
+                                    sourceCard.innerHTML = `
+                                        <div class="source-card-header">
+                                            <span class="source-index">${sources.length}</span>
+                                            <span class="source-domain">${domain}</span>
+                                        </div>
+                                        <div class="source-title">${parsed.source.title}</div>
+                                    `;
+                                    searchSourcesList.appendChild(sourceCard);
+                                    searchSourcesList.style.display = "grid";
+                                }
+                            } else if (parsed.status === "thinking") {
+                                searchLogsBox.classList.add("completed");
+                                searchLogsBox.classList.add("collapsed");
+                                searchLogsBox.querySelector(".search-logs-title").innerText = "Recherche terminée";
+                                const globeIcon = searchLogsBox.querySelector(".search-globe-icon");
+                                if (globeIcon) {
+                                    globeIcon.className = "search-globe-icon check-icon";
+                                    globeIcon.setAttribute("data-lucide", "check-circle");
+                                    lucide.createIcons({ scope: searchLogsBox });
+                                }
+                            }
+                            
+                            // Append item to list of steps
+                            if (parsed.status !== "source") {
+                                const logEntry = document.createElement("div");
+                                logEntry.className = "search-log-entry animate-slide-up";
+                                
+                                let iconHtml = '<span class="log-bullet">•</span>';
+                                if (parsed.status === "start" || parsed.status === "searching") {
+                                    iconHtml = '<i data-lucide="loader" class="animate-spin log-icon" size="12"></i>';
+                                } else if (parsed.status === "reading" || parsed.status === "thinking") {
+                                    iconHtml = '<i data-lucide="check" class="log-icon check" size="12"></i>';
+                                }
+                                
+                                logEntry.innerHTML = `${iconHtml} <span>${parsed.message}</span>`;
+                                searchLogsList.appendChild(logEntry);
+                                lucide.createIcons({ scope: logEntry });
+                                searchLogsList.scrollTop = searchLogsList.scrollHeight;
+                            }
+                            continue;
+                        }
+                        
+                        // Handle standard completions
                         const tokenText = parsed.choices[0]?.delta?.content || "";
-                        botResponseText += tokenText;
-                        botBubble.innerHTML = parseMarkdown(botResponseText);
-                        addCopyCodeButtons(botBubble);
+                        if (tokenText) {
+                            if (firstToken) {
+                                firstToken = false;
+                                botBubble.innerHTML = ""; // Clear loader dots
+                                
+                                // Auto-collapse search panel when response streaming begins
+                                if (searchLogsBox) {
+                                    searchLogsBox.classList.add("completed");
+                                    searchLogsBox.classList.add("collapsed");
+                                    searchLogsBox.querySelector(".search-logs-title").innerText = "Recherche terminée";
+                                    const globeIcon = searchLogsBox.querySelector(".search-globe-icon");
+                                    if (globeIcon && !globeIcon.classList.contains("check-icon")) {
+                                        globeIcon.className = "search-globe-icon check-icon";
+                                        globeIcon.setAttribute("data-lucide", "check-circle");
+                                        lucide.createIcons({ scope: searchLogsBox });
+                                    }
+                                }
+                            }
+                            botResponseText += tokenText;
+                            botBubble.innerHTML = parseMarkdown(botResponseText);
+                            addCopyCodeButtons(botBubble);
+                        }
                     } catch (e) {
                         // Suppress parsing errors of split packets
                     }
@@ -500,7 +612,6 @@ async function sendMessage() {
         saveCurrentConversation();
         
     } catch (e) {
-        if (statusIndicator) statusIndicator.remove();
         botBubble.innerHTML = `<span style="color: #EF4444;">⚠️ Échec de connexion : ${e.message}</span>`;
         currentMessages.push({ role: "assistant", content: `Erreur: ${e.message}` });
     }

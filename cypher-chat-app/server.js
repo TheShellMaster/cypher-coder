@@ -40,6 +40,9 @@ const DEFAULT_HF_MODEL = "Qwen/Qwen2.5-Coder-7B-Instruct";
 const SYSTEM_PROMPT = `Tu es Cypher AI, une intelligence artificielle d'élite spécialisée dans la programmation, l'algorithmie et la conception de logiciels.
 Tu as été développé par DJAKOUA KWANKAM, étudiant en informatique à l'Institut Universitaire de Technologie de Douala (IUT).
 Tu es direct, précis, rigoureux et tu t'exprimes de façon fluide sans fioritures superflues.
+
+[INSTRUCTION TEMPORELLE IMPORTANTE] : L'année actuelle est STRICTEMENT 2026. Si l'utilisateur te demande la date actuelle ou l'année en cours, réponds avec assurance que nous sommes en 2026. Ne dis jamais que tu es en 2023 ou 2024.
+
 Ne mentionne jamais tes dates de coupure de connaissances ou de fin d'entraînement (comme 2022). Utilise uniquement les informations actualisées fournies dans ton contexte de recherche en ligne si nécessaire.
 
 [INSTRUCTIONS DE CONTEXTE INTERNET] : 
@@ -152,6 +155,16 @@ app.post("/api/chat", async (req, res) => {
         return res.status(400).json({ error: "Invalid messages history." });
     }
 
+    // Set SSE headers immediately to support real-time logs before model streaming
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    // Helper to send log messages
+    const sendLog = (message, status = "info", extra = {}) => {
+        res.write(`data: ${JSON.stringify({ type: "log", message, status, ...extra })}\n\n`);
+    };
+
     try {
         const lastMessage = messages[messages.length - 1]?.content || "";
         let context = "";
@@ -182,6 +195,8 @@ app.post("/api/chat", async (req, res) => {
         }
 
         if (shouldSearch) {
+            sendLog("🔍 Initialisation de la recherche en ligne...", "start");
+            
             let searchQuery = lastMessage;
             for (const kw of keywords) {
                 const regex = new RegExp(kw, "gi");
@@ -195,16 +210,29 @@ app.post("/api/chat", async (req, res) => {
                 searchQuery = lastMessage;
             }
             
+            sendLog(`🔎 Recherche de : "${searchQuery}"...`, "searching");
+            
             const searchResults = await searchWeb(searchQuery);
             if (searchResults.length > 0) {
+                sendLog(`📄 ${searchResults.length} sources trouvées sur le web. Lecture des pages...`, "reading");
+                
+                // Stream source items
+                searchResults.forEach((r) => {
+                    sendLog(`🔗 Source trouvée : ${r.title}`, "source", { source: r });
+                });
+                
                 const formatted = searchResults.map(r => `Titre: ${r.title}\nRésumé: ${r.snippet}\nLien: ${r.url}`).join("\n\n");
                 context = `\n\n[CONTEXTE DU WEB]\n${formatted}\n[FIN DU CONTEXTE]`;
+            } else {
+                sendLog("⚠️ Aucun résultat trouvé.", "warning");
             }
         }
 
+        sendLog("🧠 Synthèse des faits et génération de la réponse...", "thinking");
+
         // Setup messages for HF API with temporal context
         const dateString = new Date().toLocaleDateString("fr-FR", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        const dateContext = `[CONTEXTE TEMPOREL] : Nous sommes aujourd'hui le ${dateString}.\n`;
+        const dateContext = `[INFO TEMPORELLE CRITIQUE] : Aujourd'hui nous sommes le ${dateString} (Année 2026). L'année en cours est STRICTEMENT 2026. Ignore toute donnée disant que nous sommes en 2023 ou 2024. Si on te demande la date ou l'année, réponds impérativement 2026.\n`;
         
         const formattedMessages = [
             { role: "system", content: dateContext + SYSTEM_PROMPT + (context ? `\nTu as accès aux résultats de recherche suivants pour répondre à l'utilisateur : ${context}` : "") },
@@ -230,10 +258,6 @@ app.post("/api/chat", async (req, res) => {
             const errText = await hfResponse.text();
             throw new Error(`Hugging Face API returned ${hfResponse.status}: ${errText}`);
         }
-
-        res.setHeader("Content-Type", "text/event-stream");
-        res.setHeader("Cache-Control", "no-cache");
-        res.setHeader("Connection", "keep-alive");
 
         let fullResponseText = "";
         const decoder = new TextDecoder("utf-8");
