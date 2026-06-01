@@ -115,18 +115,48 @@ async def chat(request: Request):
         }
         all_tools.append(search_tool_def)
         
+        # Choisir le client et le fournisseur (provider) appropriés
+        provider = None
+        if model and ("Llama-3.3-70B" in model or "Llama-3.1-70B" in model):
+            provider = "together"
+            
+        if provider:
+            local_client = InferenceClient(model=model, provider=provider, token=token)
+        else:
+            local_client = client
+            
         # Boucle d'agent côté serveur pour exécuter search_web de manière transparente
+        use_tools = True
         while True:
-            response = client.chat_completion(
-                model=model,
-                messages=messages,
-                tools=all_tools,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                stream=False
-            )
+            try:
+                if provider:
+                    response = local_client.chat_completion(
+                        messages=messages,
+                        tools=all_tools if use_tools else None,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        top_p=top_p,
+                        stream=False
+                    )
+                else:
+                    response = local_client.chat_completion(
+                        model=model,
+                        messages=messages,
+                        tools=all_tools if use_tools else None,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        top_p=top_p,
+                        stream=False
+                    )
+            except Exception as e:
+                err_msg = str(e)
+                if use_tools and ("tools" in err_msg or "UNSUPPORTED_OPENAI_PARAMS" in err_msg or "422" in err_msg):
+                    use_tools = False
+                    continue
+                else:
+                    raise e
             choice = response.choices[0]
+
             
             # Vérifier si l'IA veut appeler des outils
             if choice.message.tool_calls:
