@@ -168,7 +168,7 @@ function processFiles(files) {
     Array.from(files).forEach(file => {
         // File size limit 500KB to avoid blowing context window
         if (file.size > 500 * 1024) {
-            alert(`Le fichier "${file.name}" est trop volumineux (max 500 Ko pour les fichiers de code).`);
+            showToast(`Le fichier "${file.name}" est trop volumineux (max 500 Ko).`, "error");
             return;
         }
         
@@ -177,7 +177,7 @@ function processFiles(files) {
             const textContent = event.target.result;
             // Check if file is text-based (rough heuristic: check for null bytes)
             if (textContent.includes("\0")) {
-                alert(`Le fichier "${file.name}" semble être binaire. Seuls les fichiers de texte/code sont acceptés.`);
+                showToast(`Le fichier "${file.name}" semble être binaire. Seuls les fichiers texte sont acceptés.`, "error");
                 return;
             }
             
@@ -354,7 +354,7 @@ function renderMessage(role, content) {
                 shareText += `${m.role === 'user' ? 'Utilisateur' : 'Cypher AI'}:\n${m.content}\n\n`;
             });
             navigator.clipboard.writeText(shareText).then(() => {
-                alert("Discussion copiée dans le presse-papiers pour partage !");
+                showToast("Discussion copiée dans le presse-papiers !", "success");
             });
         });
         
@@ -847,4 +847,43 @@ function saveSettings() {
     
     // Force rerender messages labels if username changed
     loadConversation(currentConversationId);
+}
+
+// Custom Premium Toast Notification System
+function showToast(message, type = "info") {
+    let container = document.getElementById("toastContainer");
+    if (!container) {
+        container = document.createElement("div");
+        container.id = "toastContainer";
+        container.className = "toast-container";
+        document.body.appendChild(container);
+    }
+    
+    const toast = document.createElement("div");
+    toast.className = `toast-message ${type} animate-fade-in`;
+    
+    let iconName = "info";
+    if (type === "success") iconName = "check-circle";
+    else if (type === "error") iconName = "alert-triangle";
+    else if (type === "warning") iconName = "alert-circle";
+    
+    toast.innerHTML = `
+        <i data-lucide="${iconName}"></i>
+        <span>${message}</span>
+    `;
+    
+    container.appendChild(toast);
+    lucide.createIcons({ scope: toast });
+    
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+        toast.classList.remove("animate-fade-in");
+        toast.classList.add("animate-fade-out");
+        toast.addEventListener("animationend", () => {
+            toast.remove();
+            if (container.children.length === 0) {
+                container.remove();
+            }
+        });
+    }, 4000);
 }

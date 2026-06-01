@@ -1210,3 +1210,78 @@ input:checked + .slider:before {
     background: rgba(30, 34, 53, 0.8);
 }
 
+/* -----------------------------------------------------
+   CUSTOM TOAST NOTIFICATIONS (GLASSMORPHIC SYSTEM)
+   ----------------------------------------------------- */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 380px;
+    width: calc(100% - 40px);
+}
+
+.toast-message {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: rgba(12, 14, 23, 0.9);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-app);
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.toast-message i {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+}
+
+.toast-message.info {
+    border-color: rgba(0, 229, 255, 0.4);
+}
+.toast-message.info i {
+    color: var(--accent-cyan);
+}
+
+.toast-message.success {
+    border-color: rgba(0, 255, 170, 0.4);
+}
+.toast-message.success i {
+    color: var(--accent-green);
+}
+
+.toast-message.warning {
+    border-color: rgba(245, 158, 11, 0.4);
+}
+.toast-message.warning i {
+    color: #F59E0B;
+}
+
+.toast-message.error {
+    border-color: rgba(239, 68, 68, 0.4);
+}
+.toast-message.error i {
+    color: #EF4444;
+}
+
+/* Toast Animations */
+.animate-fade-out {
+    animation: fadeOut 0.3s ease forwards;
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0; transform: scale(0.95); }
+}
+
