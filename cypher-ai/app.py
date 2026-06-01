@@ -24,30 +24,11 @@ client = InferenceClient("Qwen/Qwen2.5-Coder-7B-Instruct", token=token)
 
 SYSTEM_PROMPT = """Tu es Cypher AI, une IA ultra-intelligente experte en programmation de toute catégorie. 
 Tu as été créé et développé par DJAKOUA KWANKAM, un brillant étudiant en informatique à l'Institut Universitaire de Douala.
-Tu dois toujours te présenter en tant que tel si on te demande qui tu es.
+Tu devez toujours te présenter en tant que tel si on te demande qui tu es.
 
-[INSTRUCTION MAJEURE] : Tu as désormais accès à internet grâce à l'outil `search_web`. Si un utilisateur te pose une question nécessitant des informations récentes, de la documentation technique à jour, ou des faits dont tu n'es pas sûr, TU DOIS IMPÉRATIVEMENT utiliser l'outil `search_web` avant de répondre. Ne devine jamais une nouveauté technologique si tu peux chercher sur internet."""
-
-# Définition des "Outils" (Function Calling)
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "search_web",
-            "description": "Fait une recherche sur internet pour trouver des informations récentes, des articles de presse, ou de la documentation technique.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "La requête de recherche (en français ou en anglais)."
-                    }
-                },
-                "required": ["query"]
-            }
-        }
-    }
-]
+[INSTRUCTIONS DE CONTEXTE INTERNET] : 
+Quand l'utilisateur te pose une question nécessitant des recherches actualisées ou de la documentation technique récente, des extraits de résultats de recherche DuckDuckGo seront injectés automatiquement en début de message. Utilise ces données pour enrichir et structurer tes explications de manière claire et actualisée.
+"""
 
 def search_web(query):
     """Effectue une recherche via DuckDuckGo et renvoie les résultats structurés."""
@@ -66,68 +47,69 @@ def search_web(query):
         return f"Erreur lors de la recherche: {str(e)}"
 
 def respond(message, history):
+    # Formater l'historique
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    
     for val in history:
         if val[0]:
             messages.append({"role": "user", "content": val[0]})
         if val[1]:
             messages.append({"role": "assistant", "content": val[1]})
-            
-    messages.append({"role": "user", "content": message})
-    
-    # 1. On donne la question au modèle et on attend de voir s'il décide d'utiliser un outil
-    response = client.chat_completion(
-        messages,
-        max_tokens=2048,
-        tools=tools,
-        stream=False, # Pas de stream tout de suite pour bien vérifier les outils
-    )
-    
-    first_response = response.choices[0].message
 
-    # 2. Si le modèle a décidé d'utiliser un outil (ex: search_web)
-    if first_response.tool_calls:
-        # Petit message d'attente pour l'utilisateur
-        yield "🔍 *Cypher AI fouille le web pour répondre de manière précise...*"
-        
-        # On ajoute sa décision à l'historique
-        messages.append(first_response)
-        
-        # Exécution des outils demandés
-        for tool_call in first_response.tool_calls:
-            if tool_call.function.name == "search_web":
-                args = json.loads(tool_call.function.arguments)
-                search_query = args["query"]
-                search_result = search_web(search_query)
-                
-                # On ajoute le résultat de la recherche à la conversation
-                messages.append({
-                    "role": "tool",
-                    "name": "search_web",
-                    "content": search_result,
-                    "tool_call_id": tool_call.id
-                })
-        
-        # 3. On redemande au modèle de formuler sa réponse finale en lisant les résultats du web (avec stream cette fois)
+    # Analyse et déclenchement de la recherche web par mots-clés
+    search_needed = False
+    search_query = message
+    msg_lower = message.lower()
+    
+    keywords = [
+        "cherche sur le web", "recherche sur le web", "cherche sur internet", "recherche sur internet",
+        "actualités", "actualité", "dernière version", "nouveautés de", "nouveautés sur",
+        "météo", "cours de l'action", "dernières nouvelles"
+    ]
+    
+    for kw in keywords:
+        if kw in msg_lower:
+            search_needed = True
+            for kw_to_remove in keywords:
+                search_query = search_query.replace(kw_to_remove, "")
+            search_query = search_query.strip(" :?./\"'()")
+            if not search_query or len(search_query) < 3:
+                search_query = message
+            break
+            
+    if message.startswith("/web ") or message.startswith("/search "):
+        search_needed = True
+        parts = message.split(" ", 1)
+        search_query = parts[1] if len(parts) > 1 else message
+
+    context = ""
+    if search_needed and search_query:
+        yield "🔍 *Recherche en cours sur le web...*"
+        search_res = search_web(search_query)
+        context = f"\n\n[CONTEXTE DU WEB]\n{search_res}\n[FIN DU CONTEXTE]"
+        yield "🔍 *Résultats de recherche intégrés. Génération de la réponse...*"
+
+    if context:
+        messages[0]["content"] += f"\nTu as accès aux résultats de recherche suivants pour répondre à l'utilisateur : {context}"
+
+    messages.append({"role": "user", "content": message})
+
+    response_text = ""
+    try:
         final_stream = client.chat_completion(
-            messages,
+            model="Qwen/Qwen2.5-Coder-7B-Instruct",
+            messages=messages,
             max_tokens=2048,
-            stream=True,
+            stream=True
         )
         
-        response_text = ""
         for chunk in final_stream:
             if chunk.choices and len(chunk.choices) > 0:
-                token = chunk.choices[0].delta.content
-                if token:
-                    response_text += token
+                token_val = chunk.choices[0].delta.content
+                if token_val:
+                    response_text += token_val
                     yield response_text
-                
-    else:
-        # S'il n'a pas besoin du web, il répond directement
-        if first_response.content:
-            yield first_response.content
+    except Exception as e:
+        yield f"⚠️ Une erreur est survenue lors de la communication avec l'IA : {str(e)}"
 
 demo = gr.ChatInterface(
     respond,
@@ -137,7 +119,8 @@ demo = gr.ChatInterface(
         "Qui es-tu et qui t'a créé ?",
         "Cherche sur le web quelles sont les nouveautés de React 19.",
         "Quelle est l'actualité tech d'aujourd'hui ?"
-    ]
+    ],
+    cache_examples=False
 )
 
 if __name__ == "__main__":
