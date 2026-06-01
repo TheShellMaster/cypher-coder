@@ -3,8 +3,12 @@ import cors from "cors";
 import path from "path";
 import fs from "fs";
 import https from "https";
+import dns from "dns";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
+
+// Force Node.js to resolve IPv4 addresses first to avoid ETIMEDOUT bugs on dual-stack networks
+dns.setDefaultResultOrder("ipv4first");
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
