@@ -153,11 +153,15 @@ function triggerTelemetry(username, message, responseText, token) {
  * POST /api/chat - Chat completion proxy with RAG search and SSE streaming
  */
 app.post("/api/chat", async (req, res) => {
-    const { messages, webSearch, username, token } = req.body;
+    const { messages, webSearch, username, token, model, temperature, maxTokens, searchMode } = req.body;
     const activeToken = token || DEFAULT_HF_TOKEN;
     const activeUsername = username || "invité";
+    const activeModel = model || DEFAULT_HF_MODEL;
+    const activeTemperature = (temperature !== undefined) ? temperature : 0.7;
+    const activeMaxTokens = maxTokens || 2048;
+    const activeSearchMode = searchMode || "web";
     
-    console.log(`📨 [Chat] Requête reçue de "${activeUsername}" (Recherche Web active: ${webSearch})`);
+    console.log(`📨 [Chat] Requête reçue de "${activeUsername}" (Recherche Web active: ${webSearch}, Modèle: ${activeModel})`);
     
     if (!messages || !Array.isArray(messages)) {
         return res.status(400).json({ error: "Invalid messages history." });
@@ -223,6 +227,13 @@ app.post("/api/chat", async (req, res) => {
             if (!searchQuery || searchQuery.length < 3) {
                 searchQuery = lastMessage;
             }
+
+            // Apply search focus filters
+            if (activeSearchMode === "code") {
+                searchQuery = searchQuery + " site:github.com OR site:stackoverflow.com OR site:developer.mozilla.org OR site:npmjs.com";
+            } else if (activeSearchMode === "academic") {
+                searchQuery = searchQuery + " site:arxiv.org OR site:scholar.google.com OR site:wikipedia.org OR site:nature.com";
+            }
             
             let displayQuery = searchQuery;
             if (displayQuery.length > 50) {
@@ -239,7 +250,7 @@ app.post("/api/chat", async (req, res) => {
                     sendLog(`🔗 Source trouvée : ${r.title}`, "source", { source: r });
                 });
                 
-                const formatted = searchResults.map(r => `Titre: ${r.title}\nRésumé: ${r.snippet}\nLien: ${r.url}`).join("\n\n");
+                const formatted = searchResults.map((r, idx) => `[${idx + 1}] Titre: ${r.title}\nRésumé: ${r.snippet}\nLien: ${r.url}`).join("\n\n");
                 context = `\n\n[CONTEXTE DU WEB]\n${formatted}\n[FIN DU CONTEXTE]`;
             } else {
                 sendLog("⚠️ Aucun résultat trouvé.", "warning");
@@ -265,9 +276,10 @@ app.post("/api/chat", async (req, res) => {
                 "Authorization": `Bearer ${activeToken}`
             },
             body: JSON.stringify({
-                model: DEFAULT_HF_MODEL,
+                model: activeModel,
                 messages: formattedMessages,
-                max_tokens: 2048,
+                temperature: activeTemperature,
+                max_tokens: activeMaxTokens,
                 stream: true
             })
         });
@@ -312,6 +324,21 @@ app.post("/api/chat", async (req, res) => {
         res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
         res.end();
     }
+});
+
+// API models list endpoint
+app.get("/api/models", (req, res) => {
+    res.json([
+        { id: "Qwen/Qwen2.5-Coder-7B-Instruct", name: "Qwen 2.5 Coder 7B (Par défaut)" },
+        { id: "Qwen/Qwen2.5-Coder-32B-Instruct", name: "Qwen 2.5 Coder 32B (Premium)" },
+        { id: "meta-llama/Llama-3.3-70B-Instruct", name: "Llama 3.3 70B" },
+        { id: "mistralai/Mistral-7B-Instruct-v0.3", name: "Mistral 7B" }
+    ]);
+});
+
+// API server health check endpoint
+app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", time: new Date().toISOString() });
 });
 
 // Start Express Server
