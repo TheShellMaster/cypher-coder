@@ -330,9 +330,9 @@ app.post("/api/chat", async (req, res) => {
 app.get("/api/models", (req, res) => {
     res.json([
         { id: "Qwen/Qwen2.5-Coder-7B-Instruct", name: "Qwen 2.5 Coder 7B (Par défaut)" },
-        { id: "Qwen/Qwen2.5-Coder-32B-Instruct", name: "Qwen 2.5 Coder 32B (Premium)" },
-        { id: "meta-llama/Llama-3.3-70B-Instruct", name: "Llama 3.3 70B" },
-        { id: "mistralai/Mistral-7B-Instruct-v0.3", name: "Mistral 7B" }
+        { id: "meta-llama/Llama-3.2-3B-Instruct", name: "Llama 3.2 3B (Gratuit CPU)" },
+        { id: "mistralai/Mistral-7B-Instruct-v0.3", name: "Mistral 7B (Gratuit CPU)" },
+        { id: "microsoft/Phi-3-mini-4k-instruct", name: "Phi-3 Mini 4K (Gratuit CPU)" }
     ]);
 });
 
