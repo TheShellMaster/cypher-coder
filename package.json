@@ -4,7 +4,7 @@
   "description": "Cypher Coder - Premium agentic CLI tool powered by Qwen 72B & Llama 3.3",
   "main": "index.js",
   "bin": {
-    "cypher": "./index.js"
+    "cypher": "./bin/cypher.js"
   },
   "type": "module",
   "scripts": {
