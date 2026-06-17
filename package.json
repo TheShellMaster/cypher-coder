@@ -1,0 +1,29 @@
+{
+  "name": "cypher-coder-cli",
+  "version": "2.0.0",
+  "description": "Cypher Coder - Premium agentic CLI tool powered by Qwen 72B & Llama 3.3",
+  "main": "index.js",
+  "bin": {
+    "cypher": "./index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "ai",
+    "cli",
+    "agent",
+    "cypher",
+    "coding",
+    "assistant"
+  ],
+  "author": "DJAKOUA KWANKAM",
+  "license": "MIT",
+  "dependencies": {
+    "@clack/prompts": "^0.7.0",
+    "chalk": "^5.3.0",
+    "marked": "^15.0.12",
+    "marked-terminal": "^7.3.0"
+  }
+}

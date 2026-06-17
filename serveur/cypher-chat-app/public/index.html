@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cypher AI — Intelligence Artificielle d'Élite</title>
+    <meta name="description" content="Cypher AI — L'assistant IA d'élite pour le développement et la programmation. Créé par DJAKOUA KWANKAM.">
+    <meta property="og:title" content="Cypher AI — Chat App">
+    <meta property="og:description" content="Interface de chat IA premium pour la programmation et le développement.">
+    <meta property="og:type" content="website">
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Prism.js for Syntax Highlighting -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet">
+    <!-- Mermaid.js for Diagrams -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <!-- Exporting libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+    <!-- Startup loading screen -->
+    <div class="startup-loader" id="startupLoader">
+        <div class="loader-content">
+            <img src="logo.png" alt="Cypher AI Logo" class="loader-logo">
+            <h2 class="loader-title">CYPHER AI</h2>
+            <div class="loader-bar-container">
+                <div class="loader-bar"></div>
+            </div>
+            <p class="loader-subtitle">Initialisation des modules d'intelligence...</p>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- ============================================= -->
+        <!-- SIDEBAR PANEL -->
+        <!-- ============================================= -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="app-brand">
+                    <img src="logo.png" alt="Cypher AI Logo" class="brand-logo">
+                    <div class="brand-text">
+                        <h2>CYPHER AI</h2>
+                        <span>v2.0 Premium</span>
+                    </div>
+                </div>
+                <button class="close-sidebar-btn" id="closeSidebarBtn">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            
+            <div class="sidebar-actions">
+                <button class="new-chat-btn" id="newChatBtn">
+                    <i data-lucide="plus"></i> Nouvelle discussion
+                </button>
+            </div>
+
+            <!-- Sidebar Search -->
+            <div class="sidebar-search">
+                <div class="sidebar-search-input-wrapper">
+                    <i data-lucide="search" size="14"></i>
+                    <input type="text" id="sidebarSearch" placeholder="Rechercher une conversation...">
+                </div>
+            </div>
+            
+            <div class="chat-history-list" id="chatHistoryList">
+                <!-- Chat history items will be dynamically injected here -->
+            </div>
+            
+            <div class="sidebar-footer">
+                <button class="settings-trigger-btn" id="settingsBtn">
+                    <i data-lucide="settings"></i> Réglages
+                </button>
+            </div>
+        </aside>
+
+        <!-- ============================================= -->
+        <!-- MAIN CHAT AREA -->
+        <!-- ============================================= -->
+        <main class="chat-main" id="chatMain">
+            <!-- Chat Header -->
+            <header class="chat-header">
+                <div class="header-left">
+                    <button class="menu-toggle-btn" id="menuToggleBtn">
+                        <i data-lucide="menu"></i>
+                    </button>
+                    <div class="chat-identity">
+                        <img src="logo.png" alt="Cypher Logo" class="header-avatar">
+                        <div class="chat-identity-text">
+                            <h3>Cypher AI</h3>
+                            <div class="status-indicator">
+                                <span class="status-dot"></span>
+                                <span id="statusText">Connecté au serveur</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <button class="header-action-btn" id="exportChatBtn" title="Exporter la conversation">
+                        <i data-lucide="download"></i>
+                    </button>
+                    <button class="header-action-btn" id="clearChatBtn" title="Effacer la conversation">
+                        <i data-lucide="trash-2"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Messages List -->
+            <section class="messages-container" id="messagesContainer">
+                <div class="welcome-view" id="welcomeView">
+                    <div class="welcome-logo-wrapper">
+                        <img src="logo.png" alt="Cypher Large Logo" class="welcome-logo">
+                        <div class="welcome-logo-glow"></div>
+                    </div>
+                    <h1>Bienvenue sur Cypher AI</h1>
+                    <p class="welcome-subtitle">Votre assistant d'élite pour le développement et la programmation.</p>
+                    <div class="quick-examples">
+                        <button class="example-card" data-prompt="Crée une fonction Python pour trier un dictionnaire par valeur.">
+                            <div class="example-icon">🐍</div>
+                            <div class="example-text">
+                                <h4>Script Python</h4>
+                                <p>Trier un dictionnaire par valeur</p>
+                            </div>
+                        </button>
+                        <button class="example-card" data-prompt="Crée une page HTML/CSS responsive avec un hero section moderne et animé.">
+                            <div class="example-icon">🌐</div>
+                            <div class="example-text">
+                                <h4>Page Web</h4>
+                                <p>Hero section moderne et animé</p>
+                            </div>
+                        </button>
+                        <button class="example-card" data-prompt="Recherche sur le web : dernières nouveautés en intelligence artificielle 2026">
+                            <div class="example-icon">🔍</div>
+                            <div class="example-text">
+                                <h4>Recherche Web</h4>
+                                <p>Actualités IA récentes</p>
+                            </div>
+                        </button>
+                        <button class="example-card" data-prompt="Explique le fonctionnement de Docker avec un diagramme Mermaid.">
+                            <div class="example-icon">📊</div>
+                            <div class="example-text">
+                                <h4>Diagramme</h4>
+                                <p>Architecture Docker en Mermaid</p>
+                            </div>
+                        </button>
+                        <button class="example-card" data-prompt="Crée une API REST complète en Node.js avec Express et MongoDB.">
+                            <div class="example-icon">⚡</div>
+                            <div class="example-text">
+                                <h4>API REST</h4>
+                                <p>Backend Node.js complet</p>
+                            </div>
+                        </button>
+                        <button class="example-card" data-prompt="Compare les frameworks React, Vue et Angular avec un tableau détaillé.">
+                            <div class="example-icon">📋</div>
+                            <div class="example-text">
+                                <h4>Comparatif</h4>
+                                <p>React vs Vue vs Angular</p>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Input Bar -->
+            <footer class="input-container">
+                <!-- Attachment Preview Container -->
+                <div class="attachment-preview-container" id="attachmentPreviewContainer" style="display: none;">
+                    <!-- Chips will be added dynamically here -->
+                </div>
+                
+                <div class="input-tools">
+                    <!-- Search Mode Selector -->
+                    <div class="search-mode-wrapper" id="searchModeWrapper">
+                        <button class="search-mode-btn active" data-mode="web" title="Recherche Web">
+                            <i data-lucide="globe" size="14"></i> Web
+                        </button>
+                        <button class="search-mode-btn" data-mode="code" title="Recherche Code/Dev">
+                            <i data-lucide="code" size="14"></i> Code
+                        </button>
+                        <button class="search-mode-btn" data-mode="academic" title="Recherche Académique">
+                            <i data-lucide="graduation-cap" size="14"></i> Académique
+                        </button>
+                    </div>
+                    <div class="search-toggle-wrapper">
+                        <label class="switch">
+                            <input type="checkbox" id="webSearchToggle" checked>
+                            <span class="slider round"></span>
+                        </label>
+                        <span class="toggle-label"><i data-lucide="globe" size="14"></i> Recherche</span>
+                    </div>
+                </div>
+                
+                <div class="input-bar">
+                    <input type="file" id="fileInput" style="display: none;" multiple accept=".txt,.js,.py,.html,.css,.json,.md,.csv,.log,.sh,.bat,.xml,.yml,.yaml,.ini,.conf,.java,.cpp,.c,.h,.cs,.go,.rs,.ts,.jsx,.tsx">
+                    <button id="attachBtn" class="attach-btn" type="button" title="Joindre un fichier (Ctrl+U)">
+                        <i data-lucide="paperclip"></i>
+                    </button>
+                    <textarea id="userInput" placeholder="Posez une question ou décrivez ce que vous voulez créer..." rows="1"></textarea>
+                    <button id="sendBtn" class="send-btn" disabled>
+                        <i data-lucide="arrow-up"></i>
+                    </button>
+                </div>
+                <div class="input-footer-hint">
+                    <span>Cypher AI peut faire des erreurs. Vérifiez les informations importantes.</span>
+                </div>
+            </footer>
+        </main>
+
+        <!-- ============================================= -->
+        <!-- ARTIFACTS PANEL (Right Side) -->
+        <!-- ============================================= -->
+        <aside class="artifacts-panel" id="artifactsPanel">
+            <div class="artifacts-header">
+                <div class="artifacts-header-left">
+                    <i data-lucide="file-code" class="artifacts-icon"></i>
+                    <div class="artifacts-title-group">
+                        <h3 id="artifactTitle">Artifact</h3>
+                        <span class="artifacts-badge" id="artifactBadge">HTML</span>
+                    </div>
+                </div>
+                <div class="artifacts-header-right">
+                    <div class="artifacts-tab-switcher" id="artifactTabSwitcher">
+                        <button class="artifact-tab active" data-tab="code">
+                            <i data-lucide="code" size="14"></i> Code
+                        </button>
+                        <button class="artifact-tab" data-tab="preview">
+                            <i data-lucide="eye" size="14"></i> Preview
+                        </button>
+                    </div>
+                    <div class="artifacts-actions">
+                        <button class="artifact-action-btn" id="artifactCopyBtn" title="Copier">
+                            <i data-lucide="copy" size="15"></i>
+                        </button>
+                        <button class="artifact-action-btn" id="artifactDownloadBtn" title="Télécharger">
+                            <i data-lucide="download" size="15"></i>
+                        </button>
+                        <button class="artifact-action-btn" id="artifactFullscreenBtn" title="Plein écran">
+                            <i data-lucide="maximize-2" size="15"></i>
+                        </button>
+                        <button class="artifact-action-btn" id="artifactCloseBtn" title="Fermer">
+                            <i data-lucide="x" size="15"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Code View -->
+            <div class="artifact-content-area" id="artifactCodeView">
+                <pre class="line-numbers"><code id="artifactCodeContent" class="language-html"></code></pre>
+            </div>
+            
+            <!-- Preview View (iframe sandbox) -->
+            <div class="artifact-content-area artifact-preview-area" id="artifactPreviewView" style="display: none;">
+                <div class="browser-mockup">
+                    <div class="browser-address-bar">
+                        <div class="browser-dots">
+                            <span class="browser-dot red"></span>
+                            <span class="browser-dot yellow"></span>
+                            <span class="browser-dot green"></span>
+                        </div>
+                        <div class="browser-url" id="browserUrl">localhost:3000/preview.html</div>
+                    </div>
+                    <iframe id="artifactPreviewFrame" sandbox="allow-scripts" class="artifact-iframe"></iframe>
+                </div>
+            </div>
+            
+            <!-- Mermaid View -->
+            <div class="artifact-content-area artifact-mermaid-area" id="artifactMermaidView" style="display: none;">
+                <div id="artifactMermaidContent"></div>
+            </div>
+
+            <!-- Version Navigation -->
+            <div class="artifact-version-bar" id="artifactVersionBar" style="display: none;">
+                <button class="version-nav-btn" id="artifactPrevVersion" title="Version précédente">
+                    <i data-lucide="chevron-left" size="14"></i>
+                </button>
+                <span class="version-label" id="artifactVersionLabel">v1</span>
+                <button class="version-nav-btn" id="artifactNextVersion" title="Version suivante">
+                    <i data-lucide="chevron-right" size="14"></i>
+                </button>
+            </div>
+        </aside>
+    </div>
+
+    <!-- ============================================= -->
+    <!-- SETTINGS MODAL (Full Panel with Tabs) -->
+    <!-- ============================================= -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal-content settings-panel">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <button class="close-modal-btn" id="closeModalBtn" title="Retour" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                        <i data-lucide="arrow-left" size="18"></i>
+                    </button>
+                    <h3 style="margin: 0; font-size: 18px; font-weight: 700;">Réglages</h3>
+                </div>
+            </div>
+            
+            <!-- Settings Tabs -->
+            <div class="settings-tabs">
+                <button class="settings-tab active" data-settings-tab="general">
+                    <i data-lucide="user" size="14"></i> Général
+                </button>
+                <button class="settings-tab" data-settings-tab="model">
+                    <i data-lucide="cpu" size="14"></i> Modèle
+                </button>
+                <button class="settings-tab" data-settings-tab="appearance">
+                    <i data-lucide="palette" size="14"></i> Apparence
+                </button>
+                <button class="settings-tab" data-settings-tab="connection">
+                    <i data-lucide="wifi" size="14"></i> Connexion
+                </button>
+                <button class="settings-tab" data-settings-tab="about">
+                    <i data-lucide="info" size="14"></i> À propos
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <!-- General Tab -->
+                <div class="settings-tab-content active" id="settingsTabGeneral" data-tab-content="general">
+                    <div class="form-group">
+                        <label for="usernameInput">Nom d'utilisateur</label>
+                        <input type="text" id="usernameInput" placeholder="Entrez votre nom (ex. DJAKOUA)">
+                        <span class="help-text">Utilisé pour identifier vos logs dans le dataset d'entraînement.</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="langSelect">Langue de l'interface</label>
+                        <select id="langSelect">
+                            <option value="fr">🇫🇷 Français</option>
+                            <option value="en">🇬🇧 English</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Model Tab -->
+                <div class="settings-tab-content" id="settingsTabModel" data-tab-content="model">
+                    <div class="form-group">
+                        <label for="modelSelect">Modèle d'IA</label>
+                        <select id="modelSelect">
+                            <option value="Qwen/Qwen2.5-Coder-7B-Instruct">Qwen 2.5 Coder 7B (Par défaut)</option>
+                            <option value="meta-llama/Llama-3.2-3B-Instruct">Llama 3.2 3B (Gratuit CPU)</option>
+                            <option value="mistralai/Mistral-7B-Instruct-v0.3">Mistral 7B (Gratuit CPU)</option>
+                            <option value="microsoft/Phi-3-mini-4k-instruct">Phi-3 Mini 4K (Gratuit CPU)</option>
+                        </select>
+                        <span class="help-text">Le modèle utilisé pour générer les réponses.</span>
+                    </div>
+                    <div class="form-group">
+                        <label>Température <span class="value-badge" id="temperatureValue">0.7</span></label>
+                        <input type="range" id="temperatureSlider" min="0" max="1" step="0.1" value="0.7" class="styled-slider">
+                        <span class="help-text">Contrôle la créativité. 0 = précis, 1 = créatif.</span>
+                    </div>
+                    <div class="form-group">
+                        <label>Tokens Maximum <span class="value-badge" id="maxTokensValue">2048</span></label>
+                        <input type="range" id="maxTokensSlider" min="512" max="8192" step="256" value="2048" class="styled-slider">
+                        <span class="help-text">Longueur maximale de la réponse générée.</span>
+                    </div>
+                </div>
+
+                <!-- Appearance Tab -->
+                <div class="settings-tab-content" id="settingsTabAppearance" data-tab-content="appearance">
+                    <div class="form-group">
+                        <label>Thème</label>
+                        <div class="theme-selector">
+                            <button class="theme-option active" data-theme="dark">
+                                <i data-lucide="moon" size="18"></i>
+                                <span>Sombre</span>
+                            </button>
+                            <button class="theme-option" data-theme="light">
+                                <i data-lucide="sun" size="18"></i>
+                                <span>Clair</span>
+                            </button>
+                            <button class="theme-option" data-theme="system">
+                                <i data-lucide="monitor" size="18"></i>
+                                <span>Système</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="fontSizeSelect">Taille du texte</label>
+                        <select id="fontSizeSelect">
+                            <option value="small">Petit</option>
+                            <option value="medium" selected>Normal</option>
+                            <option value="large">Grand</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Connection Tab -->
+                <div class="settings-tab-content" id="settingsTabConnection" data-tab-content="connection">
+                    <div class="form-group">
+                        <label for="tokenInput">Token Hugging Face</label>
+                        <div class="token-input-wrapper">
+                            <input type="password" id="tokenInput" placeholder="hf_...">
+                            <button class="token-toggle-btn" id="tokenToggleBtn" type="button">
+                                <i data-lucide="eye" size="14"></i>
+                            </button>
+                        </div>
+                        <span class="help-text">Laissez vide pour utiliser le token par défaut.</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="modeSelect">Mode de connexion</label>
+                        <select id="modeSelect">
+                            <option value="local">Serveur Local (RAG + Recherche Web)</option>
+                            <option value="direct">Direct Hugging Face (Sans serveur)</option>
+                        </select>
+                    </div>
+                    <div class="connection-status" id="connectionStatus">
+                        <div class="status-dot-large"></div>
+                        <span>Serveur connecté</span>
+                    </div>
+                </div>
+
+                <!-- About Tab -->
+                <div class="settings-tab-content" id="settingsTabAbout" data-tab-content="about">
+                    <div class="about-card">
+                        <img src="logo.png" alt="Cypher AI" class="about-logo">
+                        <h3>Cypher AI</h3>
+                        <p class="about-version">Version 2.0 Premium</p>
+                        <div class="about-credits">
+                            <p><strong>Créateur :</strong> DJAKOUA KWANKAM</p>
+                            <p><strong>Institution :</strong> Institut Universitaire de Technologie de Douala (IUT)</p>
+                            <p><strong>Stack :</strong> Node.js, Express, Hugging Face Inference</p>
+                        </div>
+                        <div class="about-links">
+                            <a href="https://github.com/TheShellMaster" target="_blank" class="about-link-btn">
+                                <i data-lucide="github" size="14"></i> GitHub
+                            </a>
+                            <a href="https://huggingface.co/TheShellMaster" target="_blank" class="about-link-btn">
+                                🤗 Hugging Face
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="save-settings-btn" id="saveSettingsBtn">
+                    <i data-lucide="check" size="14"></i> Sauvegarder
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Dropdown (anchored to export button) -->
+    <div class="export-dropdown" id="exportDropdown" style="display: none;">
+        <button class="export-option" data-format="md">
+            <i data-lucide="file-text" size="14"></i> Markdown (.md)
+        </button>
+        <button class="export-option" data-format="json">
+            <i data-lucide="file-json" size="14"></i> JSON (.json)
+        </button>
+        <button class="export-option" data-format="pdf">
+            <i data-lucide="file" size="14"></i> PDF (.pdf)
+        </button>
+    </div>
+
+    <!-- Context Menu for Conversations -->
+    <div class="context-menu" id="contextMenu" style="display: none;">
+        <button class="context-menu-item" data-action="rename">
+            <i data-lucide="edit-3" size="14"></i> Renommer
+        </button>
+        <button class="context-menu-item" data-action="pin">
+            <i data-lucide="pin" size="14"></i> Épingler
+        </button>
+        <button class="context-menu-item" data-action="delete">
+            <i data-lucide="trash-2" size="14"></i> Supprimer
+        </button>
+    </div>
+
+    <!-- Markdown Parser Library (marked) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="app.js"></script>
+    <script>
+        // Initialize Mermaid with dark theme
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: { useMaxWidth: true }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,673 @@
+================================================================================
+CAHIER DES CHARGES - PROJET "CYPHER AGENT CLI"
+================================================================================
+Auteur du brief : Brayan (TheShellMaster)
+Destinataires : Gemini CLI / Claude Code / Antigravity CLI (agents d'implémentation)
+Statut : projet sérieux, à exécuter avec rigueur, sans raccourcis ni suppositions
+Date de rédaction : 15/06/2026
+
+================================================================================
+1. CONTEXTE ET OBJECTIF GENERAL
+================================================================================
+
+Brayan veut créer un outil CLI agentique nommé "Cypher" (package npm),
+comparable en expérience utilisateur à :
+    - Gemini CLI
+    - Claude Code
+    - Antigravity CLI
+    - GitHub Copilot CLI
+
+Caractéristiques cibles :
+    - Ultra léger
+    - Installation via npm (global)
+    - Lancement via UNE SEULE commande : "cypher"
+    - Capable d'interagir avec le terminal de n'importe quel PC (lecture,
+      écriture fichiers, exécution shell, navigation projet, etc.)
+    - Doit avoir une PERSONNALITE propre nommée "Cypher Coder"
+    - Doit fonctionner SANS SERVEUR PERSONNEL, SANS PC PUISSANT, et
+      GRATUITEMENT (contrainte non négociable)
+
+Contraintes financières / matérielles de Brayan (pour calibrer les choix
+techniques, ne pas proposer de solutions qui nécessitent du matériel ou
+budget supplémentaire) :
+    - PC 1 : Intel Core i5 1.70GHz, 16 Go DDR4 RAM, Windows 11 Ghost Spectre
+      Compact (sécurité désactivée), GPU 2 Go VRAM (128 Mo dédiés)
+    - PC 2 : Intel Celeron 1.10GHz, 8 Go RAM, GPU 2 Go VRAM (120 Mo dédiés)
+    - Téléphone : Infinix Hot 50i, 256 Go stockage, 4 Go RAM (+4 Go virtuel)
+    - PAS de serveur dédié, PAS de VPS payant, PAS de budget cloud
+
+================================================================================
+2. PRINCIPE D'INFRASTRUCTURE (CONTRAINTE CENTRALE)
+================================================================================
+
+Puisque Brayan n'a ni serveur ni PC puissant ni budget :
+
+2.1. BACKEND IA = HUGGING FACE SPACE
+    - Un Space Hugging Face (CPU gratuit, tourne 24h/24) hébergera le
+      "cerveau" de l'agent.
+    - Ce Space doit utiliser un ou plusieurs modèles d'IA qui sont
+      RÉELLEMENT GRATUITS en requêtes ET en tokens (pas de quota payant
+      caché, pas de carte bancaire requise).
+    - Le Space communique avec le terminal du PC de l'utilisateur via
+      le CLI "cypher" installé localement (requêtes HTTP).
+
+2.2. RECHERCHE OBLIGATOIRE DES MODELES GRATUITS (ETAPE CRITIQUE - A NE PAS
+     SAUTER)
+    Avant toute implémentation, l'agent chargé du projet (Gemini CLI /
+    Claude Code / Antigravity) DOIT :
+        a) Rechercher MINUTIEUSEMENT et de façon ACTUALISÉE la liste des
+           modèles accessibles via Hugging Face Inference Providers ou
+           Inference API qui sont 100% gratuits en requêtes ET en tokens
+           (pas de tier payant déguisé, pas de limite qui bloque après
+           quelques messages).
+        b) Vérifier pour chaque modèle candidat :
+              - Capacité de FUNCTION CALLING / TOOL USE fiable (critère
+                BLOQUANT : sans tool calling, le modèle ne peut pas piloter
+                l'exécution shell/fichiers)
+              - Taille de contexte (tokens d'entrée max)
+              - Limites de débit (requêtes/minute, tokens/jour)
+              - Stabilité sur CPU gratuit (cold start, latence)
+        c) Produire un tableau comparatif d'au moins 2-3 modèles candidats
+           avec colonnes : Nom du modèle | Provider | Contexte max |
+           Tool calling (oui/non) | Limites connues | Verdict
+        d) NE JAMAIS supposer qu'un modèle est gratuit ou disponible sans
+           vérification fraîche - l'écosystème Hugging Face change souvent.
+
+2.3. PERSONNALITE DE L'OUTIL
+    - Nom de la personnalité : "Cypher Coder" (cohérent avec les projets
+      précédents de Brayan : Cypher Coder CLI agent sur HF Spaces)
+    - Le ton, le style de réponse, les messages d'accueil, les messages
+      d'erreur doivent tous porter cette identité (esthétique
+      "hacker/cyber" - cohérent avec le thème vert/noir déjà utilisé dans
+      d'autres projets de Brayan comme la démo terminal IUT).
+
+================================================================================
+3. MEMOIRE PERSISTANTE (DATASET HUGGING FACE)
+================================================================================
+
+Brayan a déjà créé un DATASET Hugging Face destiné à stocker TOUTES les
+informations de discussions ("excellent" selon ses mots). Ce dataset doit
+être utilisé comme mémoire persistante de l'agent.
+
+3.1. ACCES AU DATASET SANS INTERACTION MANUELLE
+    - Brayan NE VEUT PAS avoir à se connecter manuellement à son compte
+      Hugging Face à chaque utilisation.
+    - Il a déjà placé son TOKEN HUGGING FACE dans son système (variable
+      d'environnement locale) pour que l'agent CLI puisse :
+          - lire/écrire dans le dataset de mémoire
+          - effectuer des modifications sur son Space (déploiement,
+            mises à jour, etc.)
+    - L'implémentation doit donc :
+          - Lire automatiquement le token HF depuis l'environnement
+            local (ex: variable HF_TOKEN) au lancement du CLI
+          - Ne JAMAIS redemander ce token à l'utilisateur
+          - Utiliser ce token pour authentifier les appels vers le
+            Dataset et le Space (API Hugging Face Hub)
+          - Gérer le cas où le token est absent : message clair
+            d'instruction pour le configurer (une seule fois), sans
+            bloquer le reste du programme si possible
+
+3.2. CONTENU A STOCKER DANS LE DATASET
+    - Historique complet des conversations (par session/projet)
+    - Profils / préférences utilisateur détectées au fil du temps
+    - "Recettes de code" déjà utilisées / patterns résolus (cache de
+      solutions pour éviter de refaire les mêmes recherches)
+    - Format recommandé : JSONL, organisé par session_id, avec
+      horodatage, rôle (user/assistant/tool), contenu, et métadonnées
+      (projet concerné, tags)
+
+3.3. FONCTIONNEMENT EN TEMPS REEL
+    - Comme aucun fine-tuning n'est possible (contrainte budget), la
+      mémoire à long terme repose ENTIEREMENT sur ce dataset consulté/
+      mis à jour dynamiquement à chaque session (RAG-like : on injecte
+      dans le prompt les passages pertinents de l'historique plutôt que
+      d'entraîner le modèle).
+
+================================================================================
+4. INSTALLATION ET LANCEMENT
+================================================================================
+
+4.1. EXPERIENCE D'INSTALLATION (identique aux concurrents)
+    Commandes attendues, strictement npm :
+        npm install -g cypher-agent
+        (ou nom de package équivalent choisi par l'agent d'implémentation)
+
+4.2. LANCEMENT
+    - Une seule commande dans n'importe quel terminal : "cypher"
+    - Cette commande doit :
+          a) Charger la configuration locale (~/.cypher/config.json ou
+             équivalent) et le token HF depuis l'environnement
+          b) Détecter si on est dans un projet existant (présence d'un
+             dossier .cypher/ local) ou démarrer une init
+          c) Afficher un écran d'accueil avec la personnalité "Cypher"
+             (logo ASCII, couleurs, version, modèle actif)
+          d) Lancer la boucle interactive (REPL)
+
+4.3. LEGERETE
+    - Minimiser les dépendances npm (éviter les frameworks lourds type
+      Electron, etc. - tout doit tourner en CLI pur Node.js)
+    - Privilégier des librairies légères et largement supportées pour le
+      rendu terminal (couleurs, spinners, boîtes, autocomplétion)
+    - Doit pouvoir tourner correctement sur le PC le plus faible de
+      Brayan (Celeron 1.10GHz / 8 Go RAM) sans ralentissement notable
+
+================================================================================
+5. EXPERIENCE UTILISATEUR / TUI (INTERFACE TERMINAL)
+================================================================================
+
+Brayan a utilisé de nombreux outils CLI IA et veut retrouver leurs
+caractéristiques visuelles et comportementales :
+
+5.1. CADRES / ENCADREMENTS
+    - Les réponses, surtout celles contenant du code exécuté, doivent
+      s'afficher dans des "cadres" (bordures dessinées avec des
+      caractères Unicode de type box-drawing), comme le font Claude Code
+      et Gemini CLI.
+
+5.2. TITRES / LABELS D'ETAT (STATUS LABELS)
+    - Pendant le traitement, afficher des labels d'état contextuels,
+      par exemple :
+          [thinking] [bash] [code_investigator] [analysing] [searching]
+          [writing] [reading] [planning] [reviewing] ... et d'autres à
+          définir selon le contexte de l'action en cours.
+    - Ces labels doivent être nombreux et variés (Brayan insiste sur
+      "il y en a tellement" chez les concurrents) - prévoir un système
+      extensible de labels mappés à des "phases" de l'agent.
+
+5.3. ANIMATIONS DE REFLEXION
+    - Pendant l'attente d'une réponse du modèle (latence réseau / calcul),
+      afficher une PETITE ANIMATION (spinner) - frames Unicode tournants
+      ou équivalent, avec le label d'état courant affiché à côté.
+
+5.4. AUTOCOMPLETION PAR SLASH "/"
+    - Dès que l'utilisateur tape "/", un menu de commandes doit apparaître
+      (autocomplétion contextuelle), navigable avec les flèches et Tab,
+      comme dans Gemini CLI / Claude Code.
+
+5.5. FONCTIONNALITES / COMMANDES ATTENDUES (liste non exhaustive, "et plus
+     encore" selon Brayan - l'agent d'implémentation doit compléter avec
+     d'autres fonctionnalités usuelles des CLIs IA concurrentes) :
+        - /usage      -> afficher consommation tokens / quotas restants
+        - /model      -> afficher / changer le modèle actif
+        - /agents     -> lister / créer des sous-agents spécialisés
+        - footer      -> barre de statut persistante en bas de terminal
+                         (modèle actif, mode, tokens utilisés, projet)
+        - /permissions-> gérer les permissions d'exécution (lecture
+                          fichiers, écriture fichiers, exécution shell)
+        - /yolo       -> mode sans confirmation (exécution automatique
+                          de toutes les actions proposées par l'IA)
+        - création d'agents -> permettre de définir des sous-agents avec
+                          rôles/spécialités différents
+        - /shell      -> basculer en mode shell direct (taper des
+                          commandes système brutes)
+        - /clear      -> effacer l'écran / réinitialiser le contexte
+                          court terme
+        - /resume     -> reprendre une session précédente (depuis la
+                          mémoire / dataset HF)
+        - /rename     -> renommer la session / le projet courant
+        - ... et toute autre fonctionnalité jugée standard dans ce type
+          d'outil (help, exit/quit, init, memory, history, etc.) - à
+          IDENTIFIER et AJOUTER par l'agent d'implémentation après
+          observation des CLIs concurrents.
+
+================================================================================
+6. COMPORTEMENT DE L'AGENT IA (REGLE DE TRAVAIL FONDAMENTALE)
+================================================================================
+
+Règle explicite de Brayan, à respecter STRICTEMENT dans le system prompt
+de l'agent Cypher :
+
+    "Je n'aime pas quand un agent IA fait un travail en se basant
+    uniquement sur son apprentissage (mémoire interne du modèle). Il doit
+    AUSSI chercher des informations similaires quelque part pour avoir
+    des idées de code. C'est de cette manière qu'il doit travailler."
+
+Implications concrètes :
+    - Avant de générer du code ou une solution technique, l'agent Cypher
+      doit systématiquement effectuer une recherche d'information externe
+      (recherche web ou consultation de documentation/exemples similaires)
+      pour confronter/enrichir sa réponse, plutôt que de répondre
+      uniquement depuis ses connaissances pré-entraînées.
+    - Cette étape de recherche doit être visible dans l'interface (ex:
+      label d'état [searching] ou [code_investigator] mentionné plus haut).
+    - Le mécanisme de recherche doit lui aussi être GRATUIT (pas d'API de
+      recherche payante).
+
+================================================================================
+7. CAPACITE "DIRIGER L'IA SUR LES MARCHES A SUIVRE" SANS ENVOYER TOUTE LA
+   DOCUMENTATION
+================================================================================
+
+Difficulté soulevée par Brayan : il veut que l'outil puisse "diriger l'IA
+sur les marches à suivre" (connaître toutes les commandes, tous les
+recoins d'un système) SANS avoir à envoyer la documentation complète de
+chaque système au modèle (ce qui consommerait trop de contexte/tokens,
+contrainte critique avec des modèles gratuits à contexte limité).
+
+Pistes à explorer par l'agent d'implémentation (à approfondir et
+choisir/combiner selon faisabilité réelle) :
+    - Base de connaissances locale compacte (fichiers de référence courts,
+      "cheat sheets" de commandes par OS/outil) chargée à la demande
+      (RAG local léger) plutôt que documentation complète
+    - Détection de l'environnement (OS, shell, outils installés) au
+      lancement de Cypher, pour ne fournir au modèle QUE le contexte
+      pertinent pour CE poste précis
+    - Système de "skills"/modules courts et ciblés (inspiré des "Skills"
+      utilisés par certains agents IA), activés seulement quand le
+      contexte de la tâche le justifie
+    - Recherche web ciblée (cf. section 6) pour combler les lacunes
+      ponctuelles plutôt que tout pré-charger
+
+================================================================================
+8. STRUCTURE TECHNIQUE PROPOSEE (A AFFINER PAR L'AGENT D'IMPLEMENTATION)
+================================================================================
+
+8.1. CLI Node.js ("cypher")
+    - Point d'entrée exécutable (bin) défini dans package.json
+    - Boucle interactive (REPL) avec gestion de l'autocomplétion "/"
+    - Module de rendu terminal (cadres, couleurs, spinners, footer)
+    - Module d'exécution d'outils locaux : lecture/écriture fichiers,
+      exécution de commandes shell, navigation de répertoires, recherche
+      de texte (grep-like)
+    - Module client HTTP vers le Space Hugging Face (backend IA)
+    - Module client Hugging Face Hub pour le Dataset (mémoire), utilisant
+      le token lu depuis l'environnement local
+    - Gestion de configuration locale (par utilisateur et par projet)
+
+8.2. Backend (Space Hugging Face)
+    - Reçoit les requêtes du CLI (messages, outils disponibles, contexte)
+    - Interroge le ou les modèles gratuits identifiés en section 2.2
+    - Gère le function calling / tool use (orchestration des appels
+      d'outils demandés par le modèle, renvoyés ensuite au CLI pour
+      exécution réelle sur le PC de l'utilisateur)
+    - Doit rester actif 24h/24 sur l'offre gratuite (prévoir mécanisme
+      de "keep-alive" si nécessaire, à condition que cela reste gratuit)
+    - Lit/écrit dans le Dataset HF de mémoire via le token HF (stocké
+      côté Space en tant que secret, ou transmis de façon sécurisée)
+
+8.3. Dataset Hugging Face (mémoire)
+    - Déjà créé par Brayan
+    - Structure à organiser : sessions, historique de messages, profils,
+      recettes de code réutilisables
+    - Accès automatique via le token HF déjà configuré dans
+      l'environnement de Brayan (aucune connexion manuelle requise)
+
+================================================================================
+9. CRITERES DE REUSSITE DU PROJET
+================================================================================
+
+    - Installation en une commande npm, lancement via "cypher" uniquement
+    - Aucun coût (ni serveur, ni API payante, ni quota dépassé en usage
+      normal)
+    - Expérience terminal comparable à Gemini CLI / Claude Code /
+      Antigravity / Copilot CLI (cadres, labels d'état, animations,
+      autocomplétion "/", commandes slash, footer)
+    - Personnalité "Cypher Coder" cohérente et reconnaissable
+    - Mémoire persistante fonctionnelle via le Dataset HF, sans connexion
+      manuelle (token déjà en place)
+    - L'agent recherche systématiquement des informations externes avant
+      de produire du code (jamais uniquement "de mémoire")
+    - L'outil peut diriger l'IA efficacement dans les commandes système
+      sans surcharge de contexte par documentation complète
+
+================================================================================
+10. POINTS A CLARIFIER / VERIFIER PAR L'AGENT D'IMPLEMENTATION AVANT/PENDANT
+    LE DEVELOPPEMENT
+================================================================================
+
+    - Quels modèles Hugging Face sont AUJOURD'HUI réellement gratuits en
+      requêtes ET tokens, avec function calling fiable ? (recherche
+      obligatoire, voir section 2.2)
+    - Quel mécanisme de recherche web gratuit utiliser pour la règle de
+      la section 6 ?
+    - Quelle structure exacte donner au Dataset HF de mémoire (déjà créé
+      par Brayan - vérifier son contenu actuel avant de le restructurer) ?
+    - Quelles librairies Node.js légères choisir pour : rendu terminal
+      (cadres/couleurs), spinners, autocomplétion slash, gestion du
+      footer persistant ?
+    - Quel nom final de package npm utiliser (vérifier disponibilité sur
+      npm registry) ?
+    - Comment gérer le "keep-alive" du Space HF gratuit sans enfreindre
+      les conditions d'utilisation ?
+
+================================================================================
+ANNEXE A - ANALYSE DETAILLEE DE L'INTERFACE CLI (RECHERCHE APPROFONDIE)
+================================================================================
+
+Cette annexe détaille, à partir de l'observation de Gemini CLI et Claude Code
+(architectures publiques/documentées), TOUS les éléments d'interface et leurs
+interactions, afin que l'agent d'implémentation sache PRECISEMENT quoi
+reproduire et comment ces éléments communiquent entre eux.
+
+--------------------------------------------------------------------------
+A.1. LES TROIS PREFIXES DE SAISIE (à reproduire à l'identique)
+--------------------------------------------------------------------------
+
+Dans Gemini CLI, trois préfixes structurent TOUT ce que l'utilisateur tape
+dans la zone de saisie. Cypher doit reproduire ce modèle :
+
+    1) "/"  -> SLASH COMMAND
+       Contrôle le CLI lui-même (pas le modèle IA). Exemples : /help,
+       /clear, /model, /agents, /resume...
+       -> Interceptée AVANT envoi au modèle. Le texte n'est JAMAIS
+          transmis à l'IA, c'est le CLI lui-même qui exécute une action
+          interne (changer config, afficher menu, vider l'écran, etc.)
+
+    2) "@"  -> INJECTION DE FICHIER / CONTEXTE
+       Permet de référencer un fichier ou dossier qui sera injecté dans
+       le prompt envoyé au modèle (ex: @src/index.js "explique ce fichier").
+       -> Le CLI résout le chemin, lit le contenu (en respectant
+          .gitignore / .cypherignore), et l'insère dans le message avant
+          envoi au modèle.
+
+    3) "!"  -> PASSTHROUGH SHELL DIRECT
+       Exécute directement une commande shell sur le poste, sans passer
+       par le modèle (équivalent d'un terminal classique mais dans la
+       même session Cypher).
+       -> Le CLI capte la ligne, l'exécute via le module shell local,
+          affiche le résultat dans le même flux visuel que les réponses
+          de l'IA (mais avec un label distinct, ex: [shell]).
+
+    REGLE D'INTERACTION : ces trois préfixes ne se mélangent jamais dans
+    une même saisie de façon ambiguë. Le parser de saisie de Cypher doit
+    détecter le PREMIER caractère de la ligne pour router vers le bon
+    sous-système (commande interne / enrichissement de prompt / shell direct
+    / texte normal vers l'IA).
+
+--------------------------------------------------------------------------
+A.2. SYSTEME DE COMMANDES SLASH - ARCHITECTURE A 3 SOURCES
+--------------------------------------------------------------------------
+
+Gemini CLI charge ses commandes slash depuis PLUSIEURS sources, via un
+"CommandService" qui agrège des "loaders". Cypher doit reproduire cette
+architecture modulaire (et non une simple liste codée en dur), pour
+rester extensible :
+
+    SOURCE 1 - COMMANDES INTEGREES (built-in)
+        Compilées dans le binaire Cypher. Ce sont le cœur fonctionnel :
+        /help, /clear, /exit, /model, /agents, /usage, /memory, /resume,
+        /rename, /shell, /permissions, /yolo, /init, /settings, /stats,
+        /compress (résumer l'historique pour économiser des tokens),
+        /copy (copier la dernière réponse), /bug (signaler un bug),
+        /about ou /version.
+
+    SOURCE 2 - COMMANDES PERSONNALISEES (fichiers de définition)
+        L'utilisateur (ou Brayan) peut créer ses propres commandes via
+        des fichiers de configuration courts (JSON ou TOML), stockés
+        dans :
+            ~/.cypher/commands/        (commandes globales utilisateur)
+            <projet>/.cypher/commands/ (commandes spécifiques au projet)
+        Chaque fichier définit : nom de commande, description, et un
+        "template de prompt" pré-rempli envoyé au modèle quand la
+        commande est invoquée (ex: /test:gen -> "Génère des tests
+        unitaires pour {{fichier_courant}}").
+        -> Mécanisme de chargement : au démarrage, Cypher scanne ces deux
+           dossiers et enregistre dynamiquement les commandes trouvées
+           dans le même registre que les commandes intégrées.
+
+    SOURCE 3 - COMMANDES EXPOSEES PAR DES OUTILS EXTERNES (optionnel,
+    futur)
+        Si Cypher intègre plus tard des "providers" externes (équivalent
+        MCP), leurs prompts/outils peuvent être exposés automatiquement
+        comme commandes slash supplémentaires.
+
+    INTERACTION GLOBALE :
+        Saisie "/" -> Parser slash -> Recherche dans le REGISTRE UNIFIE
+        (built-in + personnalisées + externes) -> si commande trouvée,
+        exécution de son "handler" (fonction JS) -> le handler peut :
+            - modifier l'état interne du CLI (config, thème, mode yolo...)
+            - afficher une UI (menu, dialogue de confirmation)
+            - déclencher un appel au modèle avec un prompt pré-rempli
+            - lire/écrire dans la mémoire (dataset HF)
+
+--------------------------------------------------------------------------
+A.3. AUTOCOMPLETION "/" - COMPORTEMENT PRECIS ATTENDU
+--------------------------------------------------------------------------
+
+    1. L'utilisateur tape "/" en première position de la ligne.
+    2. Le CLI affiche IMMEDIATEMENT un menu déroulant (overlay au-dessus
+       de la zone de saisie) listant TOUTES les commandes du registre
+       unifié (section A.2), triées par pertinence/alphabétique.
+    3. Chaque caractère supplémentaire tapé FILTRE la liste en temps réel
+       (fuzzy-match sur le nom de la commande).
+    4. Navigation :
+           - Flèches Haut/Bas : déplacent la sélection dans le menu
+           - Tab ou Entrée sur un élément sélectionné : complète la ligne
+             avec le nom de la commande (+ éventuellement insère un
+             espace pour les arguments)
+           - Echap : ferme le menu sans rien insérer
+    5. Pour les commandes avec sous-commandes (ex: /agents create,
+       /agents list), l'autocomplétion doit être HIERARCHIQUE : taper
+       "/agents " ouvre un second niveau de menu avec les sous-commandes.
+    6. Affichage : chaque entrée du menu montre nom + description courte
+       sur la même ligne (alignement en colonnes).
+
+    IMPLEMENTATION : utiliser le module `readline` natif de Node.js avec
+    une fonction "completer" personnalisée, OU une librairie de rendu
+    terminal permettant un overlay (cf. section A.6 sur le choix de
+    librairie).
+
+--------------------------------------------------------------------------
+A.4. LABELS D'ETAT / "PHASES" DE L'AGENT - SYSTEME EXTENSIBLE
+--------------------------------------------------------------------------
+
+Brayan a remarqué que les CLIs concurrents affichent de nombreux labels
+contextuels pendant le traitement ([thinking], [bash], [analysing],
+[code_investigator], etc.). Cypher doit avoir un SYSTEME DE PHASES
+centralisé, pas des labels codés en dur dispersés dans le code.
+
+    MODELE DE DONNEES "PHASE" :
+        {
+          id: "searching",
+          label: "[searching]",
+          color: "cyan",
+          icon: "🔍"  (optionnel, ou caractère ASCII si pas d'emoji)
+        }
+
+    PHASES MINIMALES A IMPLEMENTER (extensible facilement) :
+        - idle           : en attente de saisie utilisateur
+        - thinking       : l'agent réfléchit / attend la réponse du modèle
+        - searching      : recherche web en cours (cf. règle section 6)
+        - code_investigator : analyse de code existant dans le projet
+        - reading        : lecture d'un ou plusieurs fichiers
+        - writing        : écriture/édition de fichier(s)
+        - bash / shell   : exécution d'une commande shell
+        - planning       : élaboration d'un plan d'action multi-étapes
+        - reviewing      : relecture/vérification du résultat d'un outil
+        - memory_sync    : lecture/écriture dans le dataset HF (mémoire)
+        - waiting_model  : attente réseau de la réponse du Space HF
+        - error          : une erreur est survenue
+
+    INTERACTION AVEC LA BOUCLE AGENTIQUE :
+        A chaque étape de la boucle ReAct (section 4.3 du corps du
+        cahier), AVANT d'exécuter une action, le CLI met à jour la
+        "phase courante" dans son état global. Le composant d'affichage
+        (footer ou ligne d'animation, cf. A.5) lit cet état et redessine
+        immédiatement le label + l'animation correspondante.
+
+        Exemple de séquence visible par l'utilisateur pour une demande
+        "corrige le bug dans app.js" :
+            [planning]  -> [reading] app.js -> [thinking] ->
+            [searching] "fix XYZ error nodejs" ->
+            [code_investigator] -> [writing] app.js ->
+            [bash] "node app.js" (test) -> [reviewing] -> réponse finale
+
+--------------------------------------------------------------------------
+A.5. ANIMATIONS DE REFLEXION (SPINNERS) - SPECIFICATIONS
+--------------------------------------------------------------------------
+
+    - Frames de rotation recommandées (Unicode braille, légères en CPU) :
+          ⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏
+      (rotation toutes les ~80-100ms via setInterval)
+
+    - Affichage : le spinner apparaît TOUJOURS juste avant ou à la place
+      du label de phase courant, sur la même ligne, en bas de l'écran
+      (juste au-dessus du footer, cf. A.7), format suggéré :
+
+          ⠼ [searching] recherche : "gradient descent implementation js"...
+
+    - Le spinner DOIT s'arrêter net dès qu'une réponse/résultat est
+      disponible, remplacé par le contenu réel (cadre de réponse, cf.
+      A.8) - jamais de superposition entre animation et contenu final.
+
+    - Le compteur de temps écoulé (optionnel mais présent chez les
+      concurrents) peut s'afficher à côté : "⠼ [thinking] (12s)"
+
+    - Implémentation : `setInterval` simple + `process.stdout.write`
+      avec retour chariot (`\r`) pour réécrire la ligne, OU librairie
+      dédiée (cf. A.6).
+
+--------------------------------------------------------------------------
+A.6. CHOIX TECHNIQUE DE RENDU TERMINAL - DEUX OPTIONS A EVALUER
+--------------------------------------------------------------------------
+
+Claude Code utilise React + Ink (moteur de rendu par composants, diffing
+de frames, 60 FPS). C'est PUISSANT mais LOURD en dépendances et en CPU -
+à éviter sur le Celeron 8 Go de Brayan si possible.
+
+    OPTION 1 - "Ink" (React pour terminal)
+        Avantages : composants réutilisables (Box, Text, Spinner),
+        gestion automatique du layout flexbox, proche de ce que font
+        Gemini CLI / Claude Code.
+        Inconvénients : dépendances supplémentaires (react, ink, yoga),
+        empreinte mémoire plus élevée, complexité d'apprentissage.
+
+    OPTION 2 - APPROCHE LEGERE "vanilla Node.js" (RECOMMANDEE PAR DEFAUT
+    pour respecter la contrainte de légèreté de Brayan)
+        - `readline` natif pour la saisie + autocomplétion
+        - `chalk` (ou équivalent ultra-léger) pour les couleurs
+        - Dessin manuel des cadres avec caractères box-drawing Unicode
+          (┌─┐│└─┘) dans une petite fonction utilitaire "renderBox(text)"
+        - Spinner fait main avec `setInterval` + `\r` (section A.5)
+        - Footer redessiné en réécrivant la dernière ligne du terminal
+          (codes ANSI de positionnement curseur)
+
+    DECISION A PRENDRE PAR L'AGENT D'IMPLEMENTATION :
+        Démarrer avec l'OPTION 2 (légère). Si le rendu devient trop
+        complexe à maintenir (multiples zones dynamiques qui se
+        chevauchent), basculer vers l'OPTION 1 (Ink) MAIS uniquement les
+        primitives de base (Box, Text, Spinner) sans le design system
+        complet de Claude Code.
+
+--------------------------------------------------------------------------
+A.7. FOOTER PERSISTANT - CONTENU ET MECANISME DE MISE A JOUR
+--------------------------------------------------------------------------
+
+    CONTENU DU FOOTER (ligne fixe en bas du terminal, toujours visible) :
+        [Cypher] modèle: <nom_modele_actif> | mode: <normal/yolo/shell>
+        | projet: <nom_dossier_courant> | tokens session: <X> |
+        mémoire: <sync OK / sync.../ hors-ligne>
+
+    MECANISME :
+        - Le footer occupe la/les dernière(s) ligne(s) du terminal.
+        - A CHAQUE changement d'état pertinent (phase, consommation
+          tokens, statut de synchronisation mémoire), le CLI :
+              1. Sauvegarde la position du curseur
+              2. Se déplace en bas de l'écran (codes ANSI)
+              3. Efface la ligne et réécrit le footer mis à jour
+              4. Restaure la position du curseur (pour ne pas gêner la
+                 saisie en cours)
+        - Le footer NE DOIT JAMAIS scroller avec le reste de la
+          conversation - il reste "collé" en bas (comportement standard
+          des CLIs IA modernes).
+
+--------------------------------------------------------------------------
+A.8. CADRES DE REPONSE / BLOCS DE CODE - REGLES D'AFFICHAGE
+--------------------------------------------------------------------------
+
+    - Tout contenu correspondant à : un bloc de code généré, le résultat
+      d'une commande shell, un diff de fichier (avant/après édition),
+      doit être affiché dans un CADRE avec :
+          - Bordure Unicode (┌─┐│└─┘ ou ╭─╮│╰─╯ pour un style plus
+            "doux")
+          - Un en-tête dans la bordure supérieure indiquant le type de
+            contenu : ex. ╭─ bash ─────────────╮ ou ╭─ app.js (modifié) ─╮
+          - Couleur de bordure variable selon le type (ex: vert pour
+            succès shell, rouge pour erreur, bleu pour diff de fichier,
+            jaune pour avertissement/permission)
+
+    - Pour les DIFFS de fichiers (avant /permissions ou en mode normal,
+      avant confirmation utilisateur) : affichage ligne par ligne avec
+      préfixe "-" (supprimé, rouge) / "+" (ajouté, vert), comme un diff
+      git classique, à l'intérieur du cadre.
+
+    - INTERACTION AVEC LES PERMISSIONS (/permissions, /yolo) :
+        En mode normal : avant toute action qui MODIFIE le système
+        (écriture fichier, commande shell), Cypher affiche le cadre
+        (diff ou commande proposée) puis une ligne de confirmation :
+            "Exécuter cette action ? (o/N)"
+        En mode /yolo : le cadre s'affiche aussi (pour transparence) mais
+        SANS attendre de confirmation - exécution immédiate, label
+        "[auto]" ajouté pour indiquer le mode sans confirmation.
+
+--------------------------------------------------------------------------
+A.9. GESTION DES SOUS-AGENTS (/agents)
+--------------------------------------------------------------------------
+
+Inspiré du système "subagents" de Gemini CLI :
+
+    - /agents list    : liste les agents disponibles (intégrés + locaux +
+                         définis par l'utilisateur)
+    - /agents create  : assistant interactif pour créer un nouvel agent
+                         (nom, rôle/personnalité, modèle préféré,
+                         outils autorisés)
+    - /agents enable <nom>  / /agents disable <nom>
+    - /agents config <nom>  : ouvre un mini-formulaire pour ajuster
+                         modèle, "température" (créativité), limites
+                         d'exécution (nombre max d'actions par tâche)
+
+    STRUCTURE DE STOCKAGE :
+        ~/.cypher/agents/<nom>.json   (agents globaux)
+        <projet>/.cypher/agents/<nom>.json (agents spécifiques au projet)
+
+    INTERACTION : un sous-agent = un profil de configuration (system
+    prompt spécifique + sous-ensemble d'outils autorisés + modèle
+    préféré). La boucle agentique principale peut "déléguer" une tâche à
+    un sous-agent en changeant temporairement de profil de configuration,
+    puis revenir au profil principal une fois la sous-tâche terminée.
+
+================================================================================
+ANNEXE B - ETAT REEL DU FREE TIER HUGGING FACE (JUIN 2026) - A VERIFIER
+ET AFFINER PAR L'AGENT D'IMPLEMENTATION AVANT TOUT DEVELOPPEMENT
+================================================================================
+
+Constats issus de la recherche (à RE-VERIFIER au moment de l'implémentation
+car ces informations évoluent vite) :
+
+    - Hugging Face propose "Inference Providers" : une passerelle unique
+      vers de nombreux fournisseurs tiers (Groq, Together AI, Fireworks,
+      Cerebras, SambaNova, Replicate, etc.), avec un "free tier généreux"
+      annoncé, mais SANS détail public précis sur les quotas exacts par
+      modèle au moment de cette recherche.
+
+    - La "Serverless Inference API" classique de HF (endpoint
+      api-inference.huggingface.co) reste décrite comme gratuite mais
+      "rate-limited", orientée prototypage, et non garantie pour un usage
+      24h/24 intensif.
+
+    - Le SUPPORT DU FUNCTION CALLING est explicitement décrit comme
+      "dépendant du modèle" (certains modèles le supportent, d'autres
+      non) - ceci CONFIRME le caractère bloquant de la vérification
+      demandée en section 2.2 du corps du cahier : il faut tester
+      concrètement le function calling sur chaque modèle candidat, pas
+      seulement lire sa fiche.
+
+    - Aucune source consultée ne fournit de tableau à jour et fiable des
+      "modèles 100% gratuits avec tool calling" - CETTE RECHERCHE DOIT
+      ETRE REFAITE PAR L'AGENT D'IMPLEMENTATION juste avant de coder,
+      idéalement en testant directement via des appels API réels
+      (essais empiriques sur 2-3 modèles candidats : Llama, Qwen,
+      Mistral en versions "Instruct" sont les familles les plus
+      fréquemment citées comme supportant le tool calling).
+
+    RECOMMANDATION CONCRETE :
+        Prévoir dans l'architecture du backend (Space HF, section 8.2) un
+        SYSTEME DE FALLBACK entre plusieurs modèles/providers (liste
+        configurable), car la disponibilité gratuite peut changer d'un
+        jour à l'autre. Le backend doit pouvoir basculer automatiquement
+        sur le modèle suivant de la liste si le premier renvoie une
+        erreur de quota ou d'indisponibilité.
+
+================================================================================
+FIN DU CAHIER DES CHARGES
+================================================================================
