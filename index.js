@@ -88,6 +88,29 @@ function restoreTerminal() {
     process.stdout.write('\r\n');
 }
 
+function expandTilde(filepath) {
+    if (!filepath) return filepath;
+    if (filepath.startsWith('~/') || filepath === '~') {
+        return path.join(os.homedir(), filepath.slice(1));
+    }
+    return filepath;
+}
+
+function isBinaryFile(filePath) {
+    try {
+        const buffer = Buffer.alloc(1024);
+        const fd = fs.openSync(filePath, 'r');
+        const bytesRead = fs.readSync(fd, buffer, 0, 1024, 0);
+        fs.closeSync(fd);
+        for (let i = 0; i < bytesRead; i++) {
+            if (buffer[i] === 0) return true;
+        }
+        return false;
+    } catch (_) {
+        return false;
+    }
+}
+
 // ─── UTILITIES ───────────────────────────────────────────────────────────────
 function stripAnsi(str) {
     return str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
@@ -439,10 +462,24 @@ function callBackendApi(messages) {
             username: os.userInfo().username || "local-user"
         });
         
-        const escapedPayload = payload.replace(/'/g, "'\\''");
-        const command = `curl -s -X POST -H "Content-Type: application/json" -d '${escapedPayload}' ${dynamicSpaceUrl}`;
+        // Write payload to a temporary file to bypass shell command line argument size limits (E2BIG)
+        const tempDir = os.tmpdir();
+        const tempFile = path.join(tempDir, `cypher_payload_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.json`);
+        try {
+            fs.writeFileSync(tempFile, payload, 'utf8');
+        } catch (err) {
+            reject(new Error(`Impossible de créer le fichier temporaire de requête : ${err.message}`));
+            return;
+        }
         
-        exec(command, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+        const command = `curl -s -X POST -H "Content-Type: application/json" -d @${tempFile} ${dynamicSpaceUrl}`;
+        
+        exec(command, { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
+            // Clean up temporary file
+            try {
+                if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+            } catch (_) {}
+            
             if (err) {
                 reject(new Error(`Erreur de connexion Space: ${err.message}`));
                 return;
@@ -478,12 +515,18 @@ function syncLogsToDataset(userMessage, responseMessage) {
                 response: responseMessage
             });
             
-            const escapedPayload = payload.replace(/'/g, "'\\''");
-            const file_path = `logs/${os.userInfo().username || "local-user"}/${new Date().toISOString().slice(0, 10)}_${sessionId.slice(0, 8)}.json`;
+            const tempDir = os.tmpdir();
+            const tempFile = path.join(tempDir, `cypher_log_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.json`);
+            fs.writeFileSync(tempFile, payload, 'utf8');
             
-            const uploadCmd = `curl -s -X POST -H "Authorization: Bearer ${token}" -H "Content-Type: application/octet-stream" --data-binary '${escapedPayload}' "https://huggingface.co/api/datasets/${hfUsername}/cypher-coder-logs/upload/main/${file_path}"`;
+            const file_path = `logs/${os.userInfo().username || "local-user"}/${new Date().toISOString().slice(0, 10)}_${sessionId.slice(0, 8)}.json`;
+            const uploadCmd = `curl -s -X POST -H "Authorization: Bearer ${token}" -H "Content-Type: application/octet-stream" --data-binary @${tempFile} "https://huggingface.co/api/datasets/${hfUsername}/cypher-coder-logs/upload/main/${file_path}"`;
             
             exec(uploadCmd, (err) => {
+                // Clean up temporary file
+                try {
+                    if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+                } catch (_) {}
                 resolve();
             });
         } catch (_) {
@@ -519,8 +562,24 @@ function listFilesRecursive(dir, maxDepth = 3, currentDepth = 1) {
 async function handleToolExecution(name, args) {
     switch (name) {
         case 'read_file': {
-            const targetPath = path.resolve(args.path);
+            const targetPath = path.resolve(expandTilde(args.path));
             if (!fs.existsSync(targetPath)) return `Erreur: Fichier introuvable à ${targetPath}`;
+            
+            try {
+                const stat = fs.statSync(targetPath);
+                if (stat.isDirectory()) {
+                    return `Erreur: "${args.path}" est un répertoire, pas un fichier.`;
+                }
+                if (isBinaryFile(targetPath)) {
+                    return `Erreur: Le fichier "${args.path}" est un fichier binaire et ne peut pas être lu comme du texte.`;
+                }
+                if (stat.size > 1024 * 1024) {
+                    return `Erreur: Le fichier "${args.path}" est trop lourd pour être lu en contexte (${(stat.size / 1024 / 1024).toFixed(2)} Mo).`;
+                }
+            } catch (err) {
+                return `Erreur lors de la lecture des métadonnées du fichier : ${err.message}`;
+            }
+
             const allowed = await checkPermission('read', `Lecture de ${args.path}`);
             if (!allowed) return "Action refusée par l'utilisateur.";
             setPhase('reading', args.path);
@@ -528,7 +587,7 @@ async function handleToolExecution(name, args) {
         }
         
         case 'write_file': {
-            const targetPath = path.resolve(args.path);
+            const targetPath = path.resolve(expandTilde(args.path));
             renderBox(`${args.path} (Écriture / Création)`, args.content, '#FFD700');
             const allowed = await checkPermission('write', `Écriture dans ${args.path}`);
             if (!allowed) return "Action refusée.";
@@ -540,7 +599,7 @@ async function handleToolExecution(name, args) {
         }
         
         case 'patch_file': {
-            const targetPath = path.resolve(args.path);
+            const targetPath = path.resolve(expandTilde(args.path));
             if (!fs.existsSync(targetPath)) return `Erreur: ${targetPath} introuvable.`;
             const content = fs.readFileSync(targetPath, 'utf8');
             const occurrences = content.split(args.search).length - 1;
@@ -556,7 +615,7 @@ async function handleToolExecution(name, args) {
         }
         
         case 'list_dir': {
-            const targetPath = path.resolve(args.path || ".");
+            const targetPath = path.resolve(expandTilde(args.path || "."));
             if (!fs.existsSync(targetPath)) return `Erreur: Répertoire introuvable à ${targetPath}`;
             setPhase('code_investigator', `Scan de ${args.path || '.'}`);
             const items = fs.readdirSync(targetPath).map(item => {
@@ -567,7 +626,7 @@ async function handleToolExecution(name, args) {
         }
         
         case 'find_files': {
-            const startDir = path.resolve(args.path || ".");
+            const startDir = path.resolve(expandTilde(args.path || "."));
             setPhase('code_investigator', `Recherche de ${args.pattern}`);
             const escaped = args.pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, '\\$&').replace(/\\\*/g, '.*').replace(/\\\?/g, '.');
             const regex = new RegExp(`^${escaped}$`, 'i');
@@ -576,7 +635,7 @@ async function handleToolExecution(name, args) {
         }
         
         case 'grep_search': {
-            const startDir = path.resolve(args.path || ".");
+            const startDir = path.resolve(expandTilde(args.path || "."));
             setPhase('code_investigator', `Recherche textuelle de: "${args.query}"`);
             const query = args.query.toLowerCase();
             const all = listFilesRecursive(startDir, 5, 1);
@@ -690,8 +749,6 @@ function promptUser(promptMsg) {
                 return;
             }
             
-            // Save cursor position
-            process.stdout.write('\x1b[s');
             // Clear current prompt line downwards
             process.stdout.write('\r\x1b[J');
             // Print current prompt + input buffer
@@ -717,15 +774,12 @@ function promptUser(promptMsg) {
                     process.stdout.write(line + ' '.repeat(padding) + chalk.gray('│\n'));
                 });
                 
-                process.stdout.write(chalk.gray('  ╰' + '─'.repeat(boxWidth - 2) + '╯\n'));
+                process.stdout.write(chalk.gray('  ╰' + '─'.repeat(boxWidth - 2) + '╯'));
                 
-                // Move cursor back up
-                const linesToMoveUp = 3 + filtered.length;
+                // Move cursor back up (relative to current position)
+                const linesToMoveUp = 2 + filtered.length;
                 process.stdout.write(`\x1b[${linesToMoveUp}A`);
             }
-            
-            // Restore cursor
-            process.stdout.write('\x1b[u');
             
             // Move cursor to proper horizontal column
             const promptLen = stripAnsi(promptMsg).length;
@@ -751,14 +805,10 @@ function promptUser(promptMsg) {
                     autoActive = false;
                     render();
                 } else {
-                    process.stdout.write('\n');
-                    if (autoActive) {
-                        const linesToClear = 3 + filtered.length;
-                        for (let i = 0; i < linesToClear; i++) {
-                            process.stdout.write('\n\x1b[2K');
-                        }
-                        process.stdout.write(`\x1b[${linesToClear}A`);
-                    }
+                    const promptLen = stripAnsi(promptMsg).length;
+                    // Move cursor to end of input line and clear options box below
+                    process.stdout.write(`\x1b[${promptLen + input.length + 1}G`);
+                    process.stdout.write('\x1b[J\n');
                     resolve(input);
                 }
                 return;
@@ -1214,7 +1264,7 @@ async function startInteractiveLoop() {
         
         while ((match = fileRegex.exec(userInput)) !== null) {
             const filePath = match[1].replace(/^["']|["']$/g, '');
-            const abs = path.resolve(filePath);
+            const abs = path.resolve(expandTilde(filePath));
             if (fs.existsSync(abs)) {
                 try {
                     const content = fs.readFileSync(abs, 'utf8');
