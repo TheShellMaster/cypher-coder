@@ -2,13 +2,14 @@
   "name": "cypher-coder-cli",
   "version": "2.0.0",
   "description": "Cypher Coder - Premium agentic CLI tool powered by Qwen 72B & Llama 3.3",
-  "main": "index.js",
+  "main": "dist/index.js",
   "bin": {
-    "cypher": "./bin/cypher.js"
+    "cypher": "./dist/index.js"
   },
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "build": "esbuild src/index.tsx --bundle --platform=node --format=esm --target=esnext --outdir=dist --packages=external --banner:js=\"#!/usr/bin/env node\"",
+    "start": "npm run build && node dist/index.js"
   },
   "keywords": [
     "ai",
@@ -22,8 +23,20 @@
   "license": "MIT",
   "dependencies": {
     "@clack/prompts": "^0.7.0",
+    "@types/react": "^19.2.17",
     "chalk": "^5.3.0",
+    "ink": "^7.1.0",
+    "ink-box": "^1.0.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
     "marked": "^15.0.12",
-    "marked-terminal": "^7.3.0"
+    "marked-terminal": "^7.3.0",
+    "react": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "esbuild": "^0.28.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
   }
 }

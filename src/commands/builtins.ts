@@ -134,6 +134,41 @@ export async function handleSlashCommand(textInput) {
             }
             break;
             
+        case '/shell':
+            if (cleanArgs.length === 0) {
+                renderBox('Shell', 'Utilisation: /shell <commande>', '#FFD700');
+            } else {
+                try {
+                    const out = execSync(cleanArgs.join(' ')).toString();
+                    renderBox('Shell Output', out || '[Aucune sortie]', '#00FFAA');
+                } catch (e: any) {
+                    renderBox('Shell Error', e.message, '#FF5555');
+                }
+            }
+            break;
+            
+        case '/model':
+            if (cleanArgs.length === 0) {
+                renderBox('Modèle', `Modèle actuel: ${sessionConfig.model}\nUtilisation: /model <nom>`, '#00FFFF');
+            } else {
+                sessionConfig.model = cleanArgs[0];
+                renderBox('Modèle', `Basculé sur : ${sessionConfig.model}`, '#00FFAA');
+            }
+            break;
+            
+        case '/rename':
+            if (cleanArgs.length === 0) {
+                renderBox('Info', 'Utilisation: /rename <nom>', '#FFD700');
+            } else {
+                renderBox('Session', `Session renommée en : ${cleanArgs.join(' ')}`, '#00FFAA');
+            }
+            break;
+            
+        case '/resume':
+            renderBox('Resume', 'Restauration de la session depuis le dataset HuggingFace...', '#00FFAA');
+            // Logique de chargement à implémenter dans memory.ts
+            break;
+
         default:
             renderBox('Erreur', `Commande inconnue : ${commandName}`, '#FF5555');
     }

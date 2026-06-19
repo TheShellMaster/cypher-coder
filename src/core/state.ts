@@ -20,11 +20,14 @@ export const state = {
     historyIndex: -1,
     sessionId: `${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
     contextFiles: new Set(),
-    plannerMode: false
+    plannerMode: false,
+    updateCallback: null as any
 };
 
 export function setPhase(phaseId, details = '') {
     state.currentPhase = phaseId;
     state.phaseDetails = details;
-    // The footer will be updated by the caller or by an event listener
+    if (state.updateCallback) {
+        state.updateCallback(state);
+    }
 }
